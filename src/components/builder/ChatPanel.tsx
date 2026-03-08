@@ -18,6 +18,7 @@ import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
 import { ApiKeyDialog, getStoredApiKey } from "@/components/ApiKeyDialog";
+import { ClarificationDialog, useClarification, type ClarificationRequest } from "./ClarificationDialog";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
 const PLAN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/plan`;
@@ -171,6 +172,7 @@ export function ChatPanel() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const location = useLocation();
   const initialPromptHandled = useRef(false);
+  const clarification = useClarification();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -244,8 +246,9 @@ export function ChatPanel() {
     }
   };
 
-  const submitPrompt = async (prompt: string) => {
-    if (!prompt.trim() || isGenerating || !activeProject) return;
+  const submitPrompt = async (initialPrompt: string) => {
+    if (!initialPrompt.trim() || isGenerating || !activeProject) return;
+    let prompt = initialPrompt;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -329,6 +332,64 @@ export function ChatPanel() {
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") throw e;
         console.warn("Plan failed, using fallback:", e);
+      }
+
+      // === PHASE 1.5: Check if clarification needed ===
+      if (plan) {
+        // Check if plan mentions alternatives user should choose from
+        const alternatives = (plan as any).alternatives as string[] | undefined;
+        if (alternatives && alternatives.length > 1) {
+          setLoadingMessage("🤔 Нужен ваш выбор...");
+          const result = await clarification.askUser({
+            title: "Выберите подход",
+            description: plan.analysis,
+            fields: [{
+              type: "choice",
+              id: "approach",
+              label: "Доступные варианты реализации:",
+              options: [
+                { value: "default", label: plan.approach, description: "Рекомендуемый подход" },
+                ...alternatives.map((alt, i) => ({ value: `alt-${i}`, label: alt, description: "Альтернативный подход" })),
+              ],
+            }],
+          });
+          if (result && result.approach !== "default") {
+            const chosenIdx = parseInt(result.approach.replace("alt-", ""));
+            if (!isNaN(chosenIdx) && alternatives[chosenIdx]) {
+              // Modify the prompt to include the chosen approach
+              prompt = `${prompt}\n\nИспользуй этот подход: ${alternatives[chosenIdx]}`;
+            }
+          }
+          if (!result) {
+            // User cancelled
+            updateLastAssistantMessage(activeProject.id, "⏹️ Отменено пользователем.");
+            currentTask = completeAllSteps(currentTask, []);
+            updateLastAssistantTask(activeProject.id, currentTask);
+            setIsGenerating(false);
+            setLoadingMessage("");
+            return;
+          }
+        }
+
+        // Check if API key is needed but not set
+        const techLower = (plan.technologies || []).map((t: string) => t.toLowerCase());
+        const needsExternalApi = techLower.some((t: string) => 
+          ["openai", "stripe", "firebase", "aws", "twilio", "sendgrid"].includes(t)
+        );
+        if (needsExternalApi && !getStoredApiKey()) {
+          setLoadingMessage("🔑 Требуется API ключ...");
+          const result = await clarification.askUser({
+            title: "Требуется API ключ",
+            description: `Для этого проекта может понадобиться API ключ (${techLower.filter((t: string) => ["openai", "stripe", "firebase"].includes(t)).join(", ")}).`,
+            fields: [
+              { type: "password", id: "apiKey", label: "API Key", placeholder: "sk-...", required: false },
+            ],
+          });
+          if (result?.apiKey) {
+            localStorage.setItem("hikko_gemini_api_key", result.apiKey);
+          }
+          // Continue regardless — key is optional
+        }
       }
 
       // === PHASE 2: Build task steps from plan ===
@@ -785,6 +846,12 @@ export function ChatPanel() {
           </div>
         </form>
       </div>
+
+      <ClarificationDialog
+        request={clarification.request}
+        onSubmit={clarification.handleSubmit}
+        onCancel={clarification.handleCancel}
+      />
     </div>
   );
 }
