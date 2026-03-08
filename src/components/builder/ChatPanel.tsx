@@ -12,7 +12,8 @@ import {
   StopCircle,
 } from "lucide-react";
 import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/context/AppContext";
-import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
+import { buildSmartContext, buildFullContext, createSandbox, commitSandbox } from "@/lib/fileTools";
+import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
