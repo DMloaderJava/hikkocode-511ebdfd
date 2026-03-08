@@ -152,7 +152,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, temperature } = await req.json();
+    const { messages, temperature, customApiKey } = await req.json();
     const requestTemp = typeof temperature === "number" ? temperature : 0.3;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
