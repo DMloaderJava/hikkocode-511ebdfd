@@ -236,6 +236,7 @@ export function ChatPanel() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({ messages: history }),
+        signal: controller.signal,
       });
 
       if (!resp.ok) {
