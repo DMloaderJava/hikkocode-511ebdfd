@@ -23,7 +23,11 @@ import {
   FilePlus,
   FileEdit,
   Eye,
+  GitCompare,
+  Plus,
+  Minus,
 } from "lucide-react";
+import type { FileDiff, DiffLine } from "@/lib/diff";
 
 export interface TaskStep {
   id: string;
@@ -50,6 +54,8 @@ interface TaskCardProps {
     new_files?: string[];
     planSteps?: string[];
   };
+  diffs?: FileDiff[];
+  diffSummaryText?: string;
   onPreviewClick?: () => void;
 }
 
@@ -97,11 +103,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   filesChanged,
   thinkingTime,
   plan,
+  diffs,
+  diffSummaryText,
   onPreviewClick,
 }, ref) {
   const [expanded, setExpanded] = useState(false);
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [planExpanded, setPlanExpanded] = useState(false);
+  const [diffExpanded, setDiffExpanded] = useState(false);
+  const [expandedDiffFile, setExpandedDiffFile] = useState<string | null>(null);
 
   const doneCount = steps.filter((s) => s.status === "done").length;
   const isComplete = doneCount === steps.length && steps.length > 0;
@@ -400,6 +410,100 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                             <span className="font-mono text-[11px]">{file}</span>
                           </div>
                         ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Diff viewer */}
+            {diffs && diffs.length > 0 && (
+              <div className="border-t border-border">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDiffExpanded(!diffExpanded); }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors"
+                >
+                  <GitCompare className="w-3 h-3" />
+                  <span>{diffSummaryText || `${diffs.length} file${diffs.length > 1 ? "s" : ""} changed`}</span>
+                  <ChevronRight className={`w-3 h-3 ml-auto transition-transform ${diffExpanded ? "rotate-90" : ""}`} />
+                </button>
+                <AnimatePresence>
+                  {diffExpanded && (
+                    <motion.div
+                      key="diffs"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-3 pb-3 space-y-2">
+                        {diffs.map((diff, i) => {
+                          const isFileExpanded = expandedDiffFile === diff.path;
+                          const statusColor = diff.status === "added"
+                            ? "text-emerald-400"
+                            : diff.status === "deleted"
+                            ? "text-red-400"
+                            : "text-amber-400";
+                          const StatusIcon = diff.status === "added" ? FilePlus : diff.status === "deleted" ? Minus : FileEdit;
+
+                          // Show only changed lines (max 20 for preview)
+                          const changedLines = diff.hunks.filter(h => h.type !== "unchanged");
+                          const previewLines = changedLines.slice(0, 20);
+
+                          return (
+                            <div key={i} className="rounded-lg border border-border overflow-hidden bg-secondary/20">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedDiffFile(isFileExpanded ? null : diff.path);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-secondary/40 transition-colors"
+                              >
+                                <StatusIcon className={`w-3 h-3 ${statusColor}`} />
+                                <span className="font-mono text-[11px] text-foreground/80 flex-1 text-left truncate">{diff.path}</span>
+                                <span className="text-[10px] text-emerald-400">+{diff.additions}</span>
+                                <span className="text-[10px] text-red-400">-{diff.deletions}</span>
+                                <ChevronRight className={`w-3 h-3 text-muted-foreground transition-transform ${isFileExpanded ? "rotate-90" : ""}`} />
+                              </button>
+                              <AnimatePresence>
+                                {isFileExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0 }}
+                                    animate={{ height: "auto" }}
+                                    exit={{ height: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="border-t border-border font-mono text-[11px] leading-5 max-h-[200px] overflow-y-auto scrollbar-thin">
+                                      {previewLines.map((line, li) => (
+                                        <div
+                                          key={li}
+                                          className={`px-3 py-0 whitespace-pre ${
+                                            line.type === "added"
+                                              ? "bg-emerald-500/10 text-emerald-300"
+                                              : line.type === "removed"
+                                              ? "bg-red-500/10 text-red-300"
+                                              : "text-muted-foreground/60"
+                                          }`}
+                                        >
+                                          <span className="inline-block w-4 text-right mr-2 text-muted-foreground/30 select-none">
+                                            {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+                                          </span>
+                                          {line.content}
+                                        </div>
+                                      ))}
+                                      {changedLines.length > 20 && (
+                                        <div className="px-3 py-1 text-muted-foreground/40 text-center">
+                                          ... {changedLines.length - 20} more changes
+                                        </div>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
                       </div>
                     </motion.div>
                   )}

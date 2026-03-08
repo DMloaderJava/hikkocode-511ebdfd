@@ -12,7 +12,8 @@ import {
   StopCircle,
 } from "lucide-react";
 import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/context/AppContext";
-import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
+import { buildSmartContext, buildFullContext, createSandbox, commitSandbox } from "@/lib/fileTools";
+import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
@@ -515,11 +516,25 @@ export function ChatPanel() {
         }
       }
 
-      // Extract and set files
+      // Extract files and apply via sandbox
       const files = extractFiles(fullText);
       const fileNames = files ? files.map(f => f.path) : [];
+      let fileDiffs: FileDiff[] = [];
+
       if (files && files.length > 0) {
-        setFiles(activeProject.id, files, prompt.trim());
+        // Create sandbox from current files, compute diff, then commit
+        const oldFiles = activeProject.files;
+        const sandbox = createSandbox(oldFiles);
+        const newFiles = commitSandbox({ ...sandbox, working: files });
+
+        // Compute diff between old and new
+        fileDiffs = diffFiles(
+          oldFiles.map(f => ({ path: f.path, content: f.content })),
+          newFiles.map(f => ({ path: f.path, content: f.content }))
+        );
+
+        // Apply to project
+        setFiles(activeProject.id, newFiles, prompt.trim());
 
         // Update steps with actual file names
         const editableSteps = currentTask.steps.filter(s => 
@@ -535,7 +550,6 @@ export function ChatPanel() {
           }
         });
 
-        // Add extra steps for files beyond plan
         if (files.length > editableSteps.length) {
           for (let i = editableSteps.length; i < files.length; i++) {
             currentTask.steps.push({
@@ -552,6 +566,11 @@ export function ChatPanel() {
       const totalTime = Date.now() - startTime;
       currentTask = completeAllSteps(currentTask, fileNames);
       currentTask.thinkingTime = totalTime;
+      // Attach diffs to task for display
+      if (fileDiffs.length > 0) {
+        (currentTask as any).diffs = fileDiffs;
+        (currentTask as any).diffSummary = diffSummary(fileDiffs);
+      }
       updateLastAssistantTask(activeProject.id, currentTask);
 
       // Final display
@@ -559,7 +578,8 @@ export function ChatPanel() {
       let finalDisplay = cleanText;
       if (files && files.length > 0) {
         const fileList = files.map((f) => `\`${f.path}\``).join(", ");
-        finalDisplay = `${cleanText || "Done!"}\n\n📁 **Generated files:** ${fileList}`;
+        const diffInfo = fileDiffs.length > 0 ? `\n\n📊 **Changes:** ${diffSummary(fileDiffs)}` : "";
+        finalDisplay = `${cleanText || "Done!"}\n\n📁 **Generated files:** ${fileList}${diffInfo}`;
       }
 
       const finalContent = finalDisplay || fullText || "Done!";
@@ -630,6 +650,8 @@ export function ChatPanel() {
                           filesChanged={msg.task.filesChanged}
                           thinkingTime={msg.task.thinkingTime}
                           plan={(msg.task as any).plan}
+                          diffs={(msg.task as any).diffs}
+                          diffSummaryText={(msg.task as any).diffSummary}
                           timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         />
                       )}
