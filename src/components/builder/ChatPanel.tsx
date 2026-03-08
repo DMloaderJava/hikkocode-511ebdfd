@@ -17,6 +17,18 @@ import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+const PLAN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/plan`;
+
+interface AgentPlan {
+  analysis: string;
+  approach: string;
+  steps: Array<{
+    action: string;
+    file?: string;
+    description: string;
+  }>;
+  technologies?: string[];
+}
 
 function extractFiles(text: string): GeneratedFile[] | null {
   const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/);
@@ -61,77 +73,48 @@ function generateTaskTitle(prompt: string): string {
   return words.length > 40 ? words.slice(0, 40) + "…" : words;
 }
 
-function generateInitialSteps(prompt: string, hasExistingFiles: boolean): TaskStep[] {
-  const lower = prompt.toLowerCase();
-  const steps: TaskStep[] = [];
+function planToSteps(plan: AgentPlan): TaskStep[] {
+  const steps: TaskStep[] = [
+    { id: "analyze", label: "Analyzing request", status: "done", type: "think", detail: plan.analysis },
+    { id: "plan", label: "Creating action plan", status: "done", type: "plan", detail: plan.approach },
+  ];
 
-  // Step 1: Thinking
-  steps.push({
-    id: "think",
-    label: "Thinking",
-    status: "pending",
-    type: "think",
-    detail: "Analyzing your request...",
+  plan.steps.forEach((s, i) => {
+    const actionMap: Record<string, TaskStep["type"]> = {
+      create_file: "create_file",
+      edit_file: "edit",
+      add_styles: "add_styles",
+      add_logic: "add_logic",
+      add_component: "add_component",
+      configure: "configure",
+      verify: "verify",
+    };
+    steps.push({
+      id: `step-${i}`,
+      label: s.description,
+      status: "pending",
+      type: (actionMap[s.action] || "edit") as TaskStep["type"],
+      detail: s.file,
+    });
   });
 
-  // Step 2: Read existing files (if project has files)
-  if (hasExistingFiles) {
-    steps.push({
-      id: "read",
-      label: "Reading project files",
-      status: "pending",
-      type: "read",
-      detail: "Understanding current codebase",
-    });
+  return steps;
+}
+
+function fallbackSteps(prompt: string, hasFiles: boolean): TaskStep[] {
+  const steps: TaskStep[] = [
+    { id: "think", label: "Analyzing request", status: "pending", type: "think", detail: "Understanding what to build..." },
+  ];
+  if (hasFiles) {
+    steps.push({ id: "read", label: "Reading project files", status: "pending", type: "read", detail: "Understanding current codebase" });
   }
-
-  // Step 3: Plan
-  steps.push({
-    id: "plan",
-    label: "Creating action plan",
-    status: "pending",
-    type: "plan",
-    detail: "Determining what to build",
-  });
-
-  // Step 4+: Dynamic edit steps based on prompt
-  if (lower.includes("fix") || lower.includes("bug") || lower.includes("error")) {
-    steps.push({
-      id: "edit-fix",
-      label: "Applying fix",
-      status: "pending",
-      type: "edit",
-    });
-    steps.push({
-      id: "verify",
-      label: "Verifying solution",
-      status: "pending",
-      type: "verify",
-    });
-  } else {
-    steps.push({
-      id: "edit-html",
-      label: "Writing index.html",
-      status: "pending",
-      type: "edit",
-      detail: "/index.html",
-    });
-    steps.push({
-      id: "edit-css",
-      label: "Writing styles.css",
-      status: "pending",
-      type: "edit",
-      detail: "/styles.css",
-    });
-    steps.push({
-      id: "edit-js",
-      label: "Writing app.js",
-      status: "pending",
-      type: "edit",
-      detail: "/app.js",
-    });
-  }
-
+  steps.push(
+    { id: "plan", label: "Creating action plan", status: "pending", type: "plan", detail: "Determining approach" },
+    { id: "edit-html", label: "Writing HTML structure", status: "pending", type: "create_file", detail: "/index.html" },
+    { id: "edit-css", label: "Adding styles", status: "pending", type: "add_styles", detail: "/styles.css" },
+    { id: "edit-js", label: "Implementing logic", status: "pending", type: "add_logic", detail: "/app.js" },
+    { id: "verify", label: "Verifying output", status: "pending", type: "verify" },
+  );
   return steps;
 }
 
@@ -176,8 +159,7 @@ export function ChatPanel() {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        Math.min(textareaRef.current.scrollHeight, 200) + "px";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
     }
   }, [input]);
 
@@ -200,10 +182,7 @@ export function ChatPanel() {
   const buildConversationHistory = () => {
     return activeProject.messages
       .filter((m) => m.content && m.content.length > 0)
-      .map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }));
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
   };
 
   const advanceTaskStep = (task: GenerationTask, stepIndex: number): GenerationTask => {
@@ -243,28 +222,28 @@ export function ChatPanel() {
 
     addMessage(activeProject.id, userMsg);
     setIsGenerating(true);
-    setLoadingMessage("Thinking...");
+    setLoadingMessage("🤖 Agent starting...");
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Create task card with smart steps
     const taskTitle = generateTaskTitle(prompt);
-    const hasFiles = activeProject.files.length > 0;
-    const taskSteps = generateInitialSteps(prompt, hasFiles);
     const startTime = Date.now();
+    const assistantMsgId = crypto.randomUUID();
+
+    // Start with minimal task - will be replaced by plan
     let currentTask: GenerationTask = {
       id: crypto.randomUUID(),
       title: taskTitle,
-      steps: taskSteps,
+      steps: [
+        { id: "analyze", label: "Analyzing request", status: "in_progress", type: "think", detail: "Understanding what you need..." },
+        { id: "plan-loading", label: "Creating action plan", status: "pending", type: "plan" },
+      ],
       filesChanged: [],
       toolCount: 0,
       timestamp: new Date(),
     };
 
-    // Show task card immediately with first step active
-    currentTask = advanceTaskStep(currentTask, 0);
-    const assistantMsgId = crypto.randomUUID();
     addMessage(activeProject.id, {
       id: assistantMsgId,
       role: "assistant",
@@ -273,71 +252,96 @@ export function ChatPanel() {
       task: currentTask,
     });
 
-    const history = [
-      ...buildConversationHistory(),
-      { role: "user" as const, content: prompt.trim() },
-    ];
-
-    if (activeProject.files.length > 0) {
-      const filesContext = activeProject.files
-        .map((f) => `--- ${f.path} ---\n${f.content}`)
-        .join("\n\n");
-      history[history.length - 1] = {
-        role: "user",
-        content: `Current project files:\n\n${filesContext}\n\nUser request: ${prompt.trim()}`,
-      };
-    }
+    const abortableSleep = (ms: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        controller.signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
 
     try {
-      // Helper to sleep but respect abort
-      const abortableSleep = (ms: number) =>
-        new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, ms);
-          controller.signal.addEventListener("abort", () => {
-            clearTimeout(timer);
-            reject(new DOMException("Aborted", "AbortError"));
-          });
+      // === PHASE 1: AI PLANNING ===
+      setLoadingMessage("🧠 Agent is thinking...");
+      let plan: AgentPlan | null = null;
+
+      try {
+        const planResp = await fetch(PLAN_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            prompt: prompt.trim(),
+            existingFiles: activeProject.files.map(f => ({ path: f.path, language: f.language })),
+          }),
+          signal: controller.signal,
         });
 
-      // === PHASE 1: Thinking ===
-      const thinkStepIdx = currentTask.steps.findIndex(s => s.id === "think");
-      if (thinkStepIdx >= 0) {
-        currentTask = advanceTaskStep(currentTask, thinkStepIdx);
-        currentTask.steps[thinkStepIdx].detail = "Analyzing your request...";
-        updateLastAssistantTask(activeProject.id, currentTask);
-      }
-      await abortableSleep(600);
-
-      // === PHASE 2: Reading files (if applicable) ===
-      const readStepIdx = currentTask.steps.findIndex(s => s.id === "read");
-      if (readStepIdx >= 0) {
-        if (thinkStepIdx >= 0) {
-          currentTask.steps[thinkStepIdx].status = "done";
-          currentTask.steps[thinkStepIdx].duration = Date.now() - startTime;
+        if (planResp.ok) {
+          plan = await planResp.json();
         }
-        currentTask = advanceTaskStep(currentTask, readStepIdx);
-        const fileNames = activeProject.files.map(f => f.name).join(", ");
-        currentTask.steps[readStepIdx].detail = fileNames;
-        updateLastAssistantTask(activeProject.id, currentTask);
-        setLoadingMessage("📖 Reading project files...");
-        await abortableSleep(400);
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") throw e;
+        console.warn("Plan failed, using fallback:", e);
       }
 
-      // === PHASE 3: Planning ===
-      const planStepIdx = currentTask.steps.findIndex(s => s.id === "plan");
-      if (planStepIdx >= 0) {
-        for (let i = 0; i < planStepIdx; i++) {
-          currentTask.steps[i].status = "done";
-          if (!currentTask.steps[i].duration) currentTask.steps[i].duration = Date.now() - startTime;
-        }
-        currentTask = advanceTaskStep(currentTask, planStepIdx);
-        currentTask.steps[planStepIdx].detail = "Determining approach...";
-        updateLastAssistantTask(activeProject.id, currentTask);
-        setLoadingMessage("📋 Creating action plan...");
-        await abortableSleep(500);
+      // === PHASE 2: Build task steps from plan ===
+      const planStepTime = Date.now() - startTime;
+
+      if (plan && plan.steps && plan.steps.length > 0) {
+        const agentSteps = planToSteps(plan);
+        agentSteps[0].duration = planStepTime;
+        agentSteps[1].duration = planStepTime;
+
+        currentTask = {
+          ...currentTask,
+          title: taskTitle,
+          steps: agentSteps,
+          plan: {
+            analysis: plan.analysis,
+            approach: plan.approach,
+            technologies: plan.technologies,
+          },
+        } as GenerationTask;
+      } else {
+        // Fallback steps
+        const fbSteps = fallbackSteps(prompt, activeProject.files.length > 0);
+        fbSteps[0].status = "done";
+        fbSteps[0].duration = planStepTime;
+        currentTask = { ...currentTask, steps: fbSteps };
       }
 
-      // === Make the actual API call ===
+      updateLastAssistantTask(activeProject.id, currentTask);
+      setLoadingMessage("📋 Plan ready, executing...");
+      await abortableSleep(300);
+
+      // === PHASE 3: EXECUTE — Call chat API ===
+      // Find first non-done step and activate it
+      const firstPendingIdx = currentTask.steps.findIndex(s => s.status === "pending");
+      if (firstPendingIdx >= 0) {
+        currentTask = advanceTaskStep(currentTask, firstPendingIdx);
+        updateLastAssistantTask(activeProject.id, currentTask);
+      }
+      setLoadingMessage("✏️ Agent is writing code...");
+
+      const history = [
+        ...buildConversationHistory(),
+        { role: "user" as const, content: prompt.trim() },
+      ];
+
+      if (activeProject.files.length > 0) {
+        const filesContext = activeProject.files
+          .map((f) => `--- ${f.path} ---\n${f.content}`)
+          .join("\n\n");
+        history[history.length - 1] = {
+          role: "user",
+          content: `Current project files:\n\n${filesContext}\n\nUser request: ${prompt.trim()}`,
+        };
+      }
+
       const resp = await fetch(CHAT_URL, {
         method: "POST",
         headers: {
@@ -361,30 +365,26 @@ export function ChatPanel() {
 
       if (!resp.body) throw new Error("No response body");
 
-      // Complete planning, start editing
-      if (planStepIdx >= 0) {
-        currentTask.steps[planStepIdx].status = "done";
-        currentTask.steps[planStepIdx].duration = Date.now() - startTime;
-        currentTask.steps[planStepIdx].detail = "Plan ready";
-      }
-
-      // Find first edit step
-      const editSteps = currentTask.steps.filter(s => s.type === "edit");
-      let currentEditIdx = 0;
-      if (editSteps.length > 0) {
-        const firstEditGlobalIdx = currentTask.steps.findIndex(s => s.id === editSteps[0].id);
-        currentTask = advanceTaskStep(currentTask, firstEditGlobalIdx);
-        updateLastAssistantTask(activeProject.id, currentTask);
-        setLoadingMessage("✏️ Writing code...");
-      }
-
+      // === PHASE 4: Stream response and advance steps ===
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
       let textBuffer = "";
-      let hasStartedContent = false;
-      let charThresholds = [100, 400, 800]; // advance edit steps at these thresholds
-      let thresholdIdx = 0;
+
+      // Calculate step advancement thresholds
+      const pendingSteps = currentTask.steps.filter(s => s.status !== "done");
+      const stepThresholds = pendingSteps.map((_, i) => (i + 1) * 300);
+      let advancedCount = 0;
+
+      const stepMessages: Record<string, string> = {
+        create_file: "📄 Creating file...",
+        add_styles: "🎨 Styling...",
+        add_logic: "⚡ Adding logic...",
+        add_component: "🧩 Building component...",
+        configure: "⚙️ Configuring...",
+        verify: "✅ Verifying...",
+        edit: "✏️ Editing...",
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -405,43 +405,33 @@ export function ChatPanel() {
 
           try {
             const parsed = JSON.parse(jsonStr);
-            const delta = parsed.choices?.[0]?.delta;
-            const content = delta?.content as string | undefined;
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content && content.length > 0) {
               fullText += content;
-              const displayText = stripFilesJson(fullText) || "Writing code...";
+              const displayText = stripFilesJson(fullText) || "Working...";
 
-              if (!hasStartedContent) {
-                hasStartedContent = true;
-              }
-
-              // Progress through edit steps based on content length
-              if (
-                thresholdIdx < charThresholds.length &&
-                fullText.length > charThresholds[thresholdIdx] &&
-                currentEditIdx < editSteps.length - 1
-              ) {
-                // Complete current edit step, advance to next
-                const curStepGlobal = currentTask.steps.findIndex(s => s.id === editSteps[currentEditIdx].id);
-                if (curStepGlobal >= 0) {
-                  currentTask.steps[curStepGlobal].status = "done";
-                  currentTask.steps[curStepGlobal].duration = Date.now() - startTime;
-                }
-                currentEditIdx++;
-                const nextStepGlobal = currentTask.steps.findIndex(s => s.id === editSteps[currentEditIdx].id);
-                if (nextStepGlobal >= 0) {
-                  currentTask = advanceTaskStep(currentTask, nextStepGlobal);
-                  // Update detail with detected file being written
-                  if (fullText.includes("styles.css") || fullText.includes('"language": "css"')) {
-                    currentTask.steps[nextStepGlobal].detail = "/styles.css";
-                    setLoadingMessage("🎨 Writing styles...");
-                  } else if (fullText.includes("app.js") || fullText.includes('"language": "javascript"')) {
-                    currentTask.steps[nextStepGlobal].detail = "/app.js";
-                    setLoadingMessage("⚡ Writing JavaScript...");
+              // Advance through steps based on content thresholds
+              if (advancedCount < stepThresholds.length - 1 && fullText.length > stepThresholds[advancedCount]) {
+                const pendingIdx = currentTask.steps.findIndex(
+                  (s, i) => s.status === "pending" || (s.status === "in_progress" && i > 0)
+                );
+                if (pendingIdx > 0) {
+                  // Complete current in-progress step
+                  const inProgressIdx = currentTask.steps.findIndex(s => s.status === "in_progress");
+                  if (inProgressIdx >= 0) {
+                    currentTask.steps[inProgressIdx].status = "done";
+                    currentTask.steps[inProgressIdx].duration = Date.now() - startTime;
                   }
+                  // Find next pending step
+                  const nextPending = currentTask.steps.findIndex(s => s.status === "pending");
+                  if (nextPending >= 0) {
+                    currentTask = advanceTaskStep(currentTask, nextPending);
+                    const stepType = currentTask.steps[nextPending].type || "edit";
+                    setLoadingMessage(stepMessages[stepType] || "✏️ Agent working...");
+                  }
+                  updateLastAssistantTask(activeProject.id, currentTask);
                 }
-                updateLastAssistantTask(activeProject.id, currentTask);
-                thresholdIdx++;
+                advancedCount++;
               }
 
               updateLastAssistantMessage(activeProject.id, displayText);
@@ -470,32 +460,34 @@ export function ChatPanel() {
         }
       }
 
-      // Extract files if present
+      // Extract and set files
       const files = extractFiles(fullText);
       const fileNames = files ? files.map(f => f.path) : [];
       if (files && files.length > 0) {
         setFiles(activeProject.id, files, prompt.trim());
 
-        // Update edit steps with actual file names
-        const editStepsList = currentTask.steps.filter(s => s.type === "edit");
+        // Update steps with actual file names
+        const editableSteps = currentTask.steps.filter(s => 
+          s.type && ["create_file", "edit", "add_styles", "add_logic", "add_component"].includes(s.type)
+        );
         files.forEach((f, i) => {
-          if (i < editStepsList.length) {
-            const idx = currentTask.steps.findIndex(s => s.id === editStepsList[i].id);
+          if (i < editableSteps.length) {
+            const idx = currentTask.steps.findIndex(s => s.id === editableSteps[i].id);
             if (idx >= 0) {
-              currentTask.steps[idx].label = `Edited ${f.name}`;
+              currentTask.steps[idx].label = `${f.name}`;
               currentTask.steps[idx].detail = f.path;
             }
           }
         });
 
-        // If more files than edit steps, add extra steps
-        if (files.length > editStepsList.length) {
-          for (let i = editStepsList.length; i < files.length; i++) {
+        // Add extra steps for files beyond plan
+        if (files.length > editableSteps.length) {
+          for (let i = editableSteps.length; i < files.length; i++) {
             currentTask.steps.push({
-              id: `edit-extra-${i}`,
-              label: `Edited ${files[i].name}`,
+              id: `extra-${i}`,
+              label: `${files[i].name}`,
               status: "done",
-              type: "edit",
+              type: "create_file",
               detail: files[i].path,
             });
           }
@@ -503,8 +495,6 @@ export function ChatPanel() {
       }
 
       const totalTime = Date.now() - startTime;
-
-      // Complete all task steps
       currentTask = completeAllSteps(currentTask, fileNames);
       currentTask.thinkingTime = totalTime;
       updateLastAssistantTask(activeProject.id, currentTask);
@@ -522,7 +512,7 @@ export function ChatPanel() {
       persistAssistantMessage(activeProject.id, assistantMsgId, finalContent);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        const stopMsg = "⏹️ Generation stopped by user.";
+        const stopMsg = "⏹️ Agent stopped by user.";
         updateLastAssistantMessage(activeProject.id, stopMsg);
         persistAssistantMessage(activeProject.id, assistantMsgId, stopMsg);
       } else {
@@ -550,14 +540,13 @@ export function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages area */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin">
         {activeProject.messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <div className="w-8 h-8 rounded-lg gradient-lovable mb-3 opacity-40" />
             <p className="text-sm text-foreground font-medium mb-1">Start building</p>
             <p className="text-xs text-muted-foreground max-w-[240px]">
-              Describe the app you want to create and hikkocode will build it for you
+              Describe the app you want to create and the AI agent will plan and build it for you
             </p>
           </div>
         ) : (
@@ -578,7 +567,6 @@ export function ChatPanel() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {/* Task card */}
                       {msg.task && (
                         <TaskCard
                           title={msg.task.title}
@@ -586,10 +574,10 @@ export function ChatPanel() {
                           toolCount={msg.task.toolCount}
                           filesChanged={msg.task.filesChanged}
                           thinkingTime={msg.task.thinkingTime}
+                          plan={(msg.task as any).plan}
                           timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         />
                       )}
-                      {/* Text content */}
                       {msg.content && (
                         <div className="flex gap-2.5">
                           <div className="w-6 h-6 rounded-md gradient-lovable flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -626,7 +614,6 @@ export function ChatPanel() {
         )}
       </div>
 
-      {/* Bottom input area */}
       <div className="p-3 border-t border-border">
         <form onSubmit={handleSubmit}>
           <div className="bg-secondary/60 border border-border rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-ring/30 transition-shadow">
@@ -634,7 +621,7 @@ export function ChatPanel() {
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask hikkocode..."
+              placeholder="Ask the AI agent..."
               className="w-full bg-transparent px-3.5 pt-3 pb-1 text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none min-h-[40px] max-h-[200px]"
               disabled={isGenerating}
               rows={1}
@@ -649,9 +636,7 @@ export function ChatPanel() {
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setInput((prev) => prev + "\nPlease provide a visual/UI-focused update. ");
-                  }}
+                  onClick={() => setInput((prev) => prev + "\nPlease provide a visual/UI-focused update. ")}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                 >
                   <Square className="w-3 h-3" />
@@ -661,9 +646,7 @@ export function ChatPanel() {
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    toast.info("Image attachments coming soon!");
-                  }}
+                  onClick={() => toast.info("Image attachments coming soon!")}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   title="Attach image"
                 >
@@ -679,8 +662,7 @@ export function ChatPanel() {
                       "Improve the loading states",
                       "Add animations and transitions",
                     ];
-                    const random = suggestions[Math.floor(Math.random() * suggestions.length)];
-                    setInput(random);
+                    setInput(suggestions[Math.floor(Math.random() * suggestions.length)]);
                   }}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   title="Suggestions"
@@ -696,8 +678,7 @@ export function ChatPanel() {
                       "Make a dashboard with sidebar, stats cards, and a chart",
                       "Build a login/signup form with validation",
                     ];
-                    const random = templates[Math.floor(Math.random() * templates.length)];
-                    setInput(random);
+                    setInput(templates[Math.floor(Math.random() * templates.length)]);
                   }}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   title="Templates"
@@ -709,7 +690,7 @@ export function ChatPanel() {
                     type="button"
                     onClick={handleStop}
                     className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center ml-1 hover:opacity-80 transition-opacity"
-                    title="Stop generation"
+                    title="Stop agent"
                   >
                     <StopCircle className="w-3.5 h-3.5 text-destructive-foreground" />
                   </button>
