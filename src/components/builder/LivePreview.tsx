@@ -1,6 +1,6 @@
 import { useApp } from "@/context/AppContext";
 import { Monitor } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 interface LivePreviewProps {
   device?: "desktop" | "tablet" | "mobile";
@@ -10,38 +10,42 @@ interface LivePreviewProps {
 export function LivePreview({ device = "desktop", refreshKey = 0 }: LivePreviewProps) {
   const { activeProject, isGenerating } = useApp();
 
-  const previewHtml = useMemo(() => {
-    if (!activeProject || activeProject.files.length === 0) return null;
+  const files = activeProject?.files ?? [];
 
-    const htmlFile = activeProject.files.find((f) => f.language === "html");
-    const cssFile = activeProject.files.find((f) => f.language === "css");
-    const jsFile = activeProject.files.find((f) => f.language === "javascript");
+  const previewHtml = useMemo(() => {
+    if (files.length === 0) return null;
+
+    const htmlFile = files.find((f) => f.language === "html");
+    const cssFiles = files.filter((f) => f.language === "css");
+    const jsFiles = files.filter((f) => f.language === "javascript" || f.language === "typescript");
 
     if (!htmlFile) return null;
 
     let html = htmlFile.content;
 
-    if (cssFile) {
-      html = html.replace(
-        /<link[^>]*href=["']styles\.css["'][^>]*\/?>/i,
-        `<style>${cssFile.content}</style>`
-      );
+    // Inject all CSS
+    if (cssFiles.length > 0) {
+      const allCss = cssFiles.map((f) => f.content).join("\n");
+      // Replace link tags referencing css files
+      html = html.replace(/<link[^>]*href=["'][^"']*\.css["'][^>]*\/?>/gi, "");
+      html = html.replace("</head>", `<style>${allCss}</style>\n</head>`);
     }
 
-    if (jsFile) {
-      html = html.replace(
-        /<script[^>]*src=["'](?:app|auth)\.js["'][^>]*><\/script>/i,
-        `<script>${jsFile.content}<\/script>`
-      );
+    // Inject all JS
+    if (jsFiles.length > 0) {
+      const allJs = jsFiles.map((f) => f.content).join("\n;\n");
+      // Remove script tags referencing local js files
+      html = html.replace(/<script[^>]*src=["'][^"']*\.js["'][^>]*><\/script>/gi, "");
+      html = html.replace("</body>", `<script>${allJs}<\/script>\n</body>`);
     }
 
     return html;
-  }, [activeProject]);
+  }, [files]);
 
   const deviceWidth =
     device === "mobile" ? "375px" : device === "tablet" ? "768px" : "100%";
 
-  if (!activeProject || activeProject.files.length === 0) {
+  if (files.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center h-full">
         <div className="text-center">
@@ -59,7 +63,6 @@ export function LivePreview({ device = "desktop", refreshKey = 0 }: LivePreviewP
 
   return (
     <div className="flex flex-col h-full">
-      {/* Preview iframe — clean, no internal toolbar */}
       <div className="flex-1 flex items-start justify-center bg-secondary/20 overflow-auto">
         <div
           className="h-full bg-white transition-all duration-300"
@@ -67,7 +70,7 @@ export function LivePreview({ device = "desktop", refreshKey = 0 }: LivePreviewP
         >
           {previewHtml && (
             <iframe
-              key={refreshKey}
+              key={`${refreshKey}-${files.length}`}
               srcDoc={previewHtml}
               className="w-full h-full border-0"
               title="App Preview"
