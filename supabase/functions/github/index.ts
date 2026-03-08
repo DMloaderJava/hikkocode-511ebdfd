@@ -74,6 +74,8 @@ async function pushFilesToBranch(
 
   return newCommitData.sha;
 }
+
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
