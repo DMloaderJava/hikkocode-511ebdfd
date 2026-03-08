@@ -123,7 +123,7 @@ export function GitHubDialog({ open, onClose }: GitHubDialogProps) {
                   onClick={handleCopyClone}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 teaccent" /ent> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? <Check className="w-3.5 h-3.5 text-accent" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
