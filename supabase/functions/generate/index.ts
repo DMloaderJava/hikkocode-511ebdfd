@@ -105,8 +105,8 @@ function getGeminiKeys(): string[] {
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
 
-async function callGeminiFallback(messages: Array<{ role: string; content: string }>, stream: boolean) {
-  const keys = getGeminiKeys();
+async function callGeminiFallback(messages: Array<{ role: string; content: string }>, stream: boolean, customKey?: string) {
+  const keys = customKey ? [customKey, ...getGeminiKeys()] : getGeminiKeys();
   if (keys.length === 0) return null;
 
   const systemInstruction = messages.find((m) => m.role === "system")?.content || "";
