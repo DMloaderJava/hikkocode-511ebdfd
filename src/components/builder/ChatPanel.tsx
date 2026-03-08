@@ -90,6 +90,7 @@ export function ChatPanel() {
     loadingMessage,
     updateLastAssistantMessage,
     updateLastAssistantTask,
+    persistAssistantMessage,
   } = useApp();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -205,8 +206,9 @@ export function ChatPanel() {
 
     // Show task card immediately with first step active
     currentTask = advanceTaskStep(currentTask, 0);
+    const assistantMsgId = crypto.randomUUID();
     addMessage(activeProject.id, {
-      id: crypto.randomUUID(),
+      id: assistantMsgId,
       role: "assistant",
       content: "",
       timestamp: new Date(),
@@ -347,13 +349,19 @@ export function ChatPanel() {
         finalDisplay = `${cleanText || "Done!"}\n\n📁 **Generated files:** ${fileList}`;
       }
 
-      updateLastAssistantMessage(activeProject.id, finalDisplay || fullText || "Done!");
+      const finalContent = finalDisplay || fullText || "Done!";
+      updateLastAssistantMessage(activeProject.id, finalContent);
+      persistAssistantMessage(activeProject.id, assistantMsgId, finalContent);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
-        updateLastAssistantMessage(activeProject.id, "⏹️ Generation stopped by user.");
+        const stopMsg = "⏹️ Generation stopped by user.";
+        updateLastAssistantMessage(activeProject.id, stopMsg);
+        persistAssistantMessage(activeProject.id, assistantMsgId, stopMsg);
       } else {
         const errorMessage = err instanceof Error ? err.message : "Unknown error";
-        updateLastAssistantMessage(activeProject.id, `⚠️ Something went wrong: ${errorMessage}`);
+        const errMsg = `⚠️ Something went wrong: ${errorMessage}`;
+        updateLastAssistantMessage(activeProject.id, errMsg);
+        persistAssistantMessage(activeProject.id, assistantMsgId, errMsg);
       }
       currentTask = completeAllSteps(currentTask, []);
       updateLastAssistantTask(activeProject.id, currentTask);

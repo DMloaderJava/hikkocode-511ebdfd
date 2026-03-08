@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
@@ -72,6 +72,7 @@ interface AppContextType extends AppState {
   restoreVersion: (projectId: string, versionId: string) => void;
   updateLastAssistantMessage: (projectId: string, content: string) => void;
   updateLastAssistantTask: (projectId: string, task: GenerationTask) => void;
+  persistAssistantMessage: (projectId: string, messageId: string, content: string) => void;
   signOut: () => Promise<void>;
   loadProjects: () => Promise<void>;
 }
@@ -107,6 +108,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     authLoading: true,
   });
 
+  const projectsLoadedRef = useRef(false);
+  const userRef = useRef<User | null>(null);
+
+  // Keep userRef in sync
+  useEffect(() => {
+    userRef.current = state.user;
+  }, [state.user]);
+
   // Auth listener
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -122,11 +131,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    projectsLoadedRef.current = false;
     setState(prev => ({ ...prev, user: null, projects: [], activeProject: null, activeFile: null }));
   }, []);
 
   const loadProjects = useCallback(async () => {
-    if (!state.user) return;
+    const user = userRef.current;
+    if (!user) return;
 
     const { data: projectRows } = await supabase
       .from("projects")
@@ -138,16 +149,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const projects: Project[] = [];
 
     for (const row of projectRows) {
-      const { data: fileRows } = await supabase
-        .from("project_files")
-        .select("*")
-        .eq("project_id", row.id);
-
-      const { data: msgRows } = await supabase
-        .from("chat_messages")
-        .select("*")
-        .eq("project_id", row.id)
-        .order("created_at", { ascending: true });
+      const [{ data: fileRows }, { data: msgRows }] = await Promise.all([
+        supabase.from("project_files").select("*").eq("project_id", row.id),
+        supabase.from("chat_messages").select("*").eq("project_id", row.id).order("created_at", { ascending: true }),
+      ]);
 
       projects.push({
         id: row.id,
@@ -161,30 +166,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
           language: f.language,
           content: f.content,
         })),
-        messages: (msgRows || []).map(m => ({
-          id: m.id,
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          timestamp: new Date(m.created_at),
-        })),
+        // Filter out empty assistant messages (from task card stubs)
+        messages: (msgRows || [])
+          .filter(m => m.content && m.content.trim().length > 0)
+          .map(m => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            timestamp: new Date(m.created_at),
+          })),
         history: [],
       });
     }
 
     setState(prev => ({ ...prev, projects }));
-  }, [state.user]);
+  }, []);
 
-  // Load projects when user logs in
+  // Load projects when user logs in (only once per session)
   useEffect(() => {
-    if (state.user) loadProjects();
-  }, [state.user]);
+    if (state.user && !projectsLoadedRef.current) {
+      projectsLoadedRef.current = true;
+      loadProjects();
+    }
+    if (!state.user) {
+      projectsLoadedRef.current = false;
+    }
+  }, [state.user, loadProjects]);
 
   const createProject = useCallback(async (name: string, description: string) => {
-    // Create in DB if user is logged in
-    if (state.user) {
+    const user = userRef.current;
+    if (user) {
       const { data, error } = await supabase
         .from("projects")
-        .insert({ name, description, user_id: state.user.id })
+        .insert({ name, description, user_id: user.id })
         .select()
         .single();
 
@@ -228,7 +242,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeFile: null,
     }));
     return project;
-  }, [state.user]);
+  }, []);
 
   const setActiveProject = useCallback((project: Project) => {
     setState(prev => ({ ...prev, activeProject: project, activeFile: null }));
@@ -239,8 +253,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addMessage = useCallback((projectId: string, message: ChatMessage) => {
-    // Save to DB async (fire and forget)
-    if (state.user) {
+    // Only save to DB if message has actual content
+    const user = userRef.current;
+    if (user && message.content && message.content.trim().length > 0) {
       supabase
         .from("chat_messages")
         .insert({
@@ -261,7 +276,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : prev.activeProject;
       return { ...prev, projects, activeProject };
     });
-  }, [state.user]);
+  }, []);
 
   const updateLastAssistantMessage = useCallback((projectId: string, content: string) => {
     setState(prev => {
@@ -303,9 +318,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Persist final assistant message content to DB (upsert)
+  const persistAssistantMessage = useCallback((projectId: string, messageId: string, content: string) => {
+    const user = userRef.current;
+    if (!user || !content.trim()) return;
+
+    supabase
+      .from("chat_messages")
+      .upsert({
+        id: messageId,
+        project_id: projectId,
+        role: "assistant",
+        content: content,
+      })
+      .then();
+  }, []);
+
   const setFiles = useCallback((projectId: string, files: GeneratedFile[], prompt?: string) => {
-    // Save files to DB
-    if (state.user) {
+    const user = userRef.current;
+    if (user) {
       // Delete old files and insert new ones
       supabase
         .from("project_files")
@@ -323,17 +354,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })))
             .then();
         });
-
-      // Update project version
-      supabase
-        .from("projects")
-        .update({ version: (state.activeProject?.version || 0) + 1, updated_at: new Date().toISOString() })
-        .eq("id", projectId)
-        .then();
     }
 
     setState(prev => {
       const updateProject = (p: Project): Project => {
+        // Update version in DB
+        const newVersion = p.version + 1;
+        if (user) {
+          supabase
+            .from("projects")
+            .update({ version: newVersion, updated_at: new Date().toISOString() })
+            .eq("id", projectId)
+            .then();
+        }
+
         const snapshot: VersionSnapshot = {
           id: crypto.randomUUID(),
           version: p.version,
@@ -342,7 +376,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           timestamp: new Date(),
         };
         const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
-        return { ...p, files, version: p.version + 1, history: newHistory };
+        return { ...p, files, version: newVersion, history: newHistory };
       };
 
       const projects = prev.projects.map(p =>
@@ -353,7 +387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         : prev.activeProject;
       return { ...prev, projects, activeProject };
     });
-  }, [state.user, state.activeProject]);
+  }, []);
 
   const restoreVersion = useCallback((projectId: string, versionId: string) => {
     setState(prev => {
@@ -406,6 +440,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restoreVersion,
       updateLastAssistantMessage,
       updateLastAssistantTask,
+      persistAssistantMessage,
       signOut,
       loadProjects,
     }}>
