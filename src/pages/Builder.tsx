@@ -31,6 +31,7 @@ export default function Builder() {
   const [rightView, setRightView] = useState<RightView>("preview");
   const [showSidebar, setShowSidebar] = useState(false);
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const [showPublish, setShowPublish] = useState(false);
 
   const effectiveView = activeFile ? "code" : rightView;
 
