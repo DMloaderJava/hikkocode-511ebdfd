@@ -389,7 +389,7 @@ export function ChatPanel() {
             <div className="w-8 h-8 rounded-lg gradient-lovable mb-3 opacity-40" />
             <p className="text-sm text-foreground font-medium mb-1">Start building</p>
             <p className="text-xs text-muted-foreground max-w-[240px]">
-              Describe the app you want to create and Laughable will build it for you
+              Describe the app you want to create and hikkocode will build it for you
             </p>
           </div>
         ) : (
