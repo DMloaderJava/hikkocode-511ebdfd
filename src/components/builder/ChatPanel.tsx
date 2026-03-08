@@ -248,9 +248,11 @@ export function ChatPanel() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Create task card
+    // Create task card with smart steps
     const taskTitle = generateTaskTitle(prompt);
-    const taskSteps = generateTaskSteps(prompt);
+    const hasFiles = activeProject.files.length > 0;
+    const taskSteps = generateInitialSteps(prompt, hasFiles);
+    const startTime = Date.now();
     let currentTask: GenerationTask = {
       id: crypto.randomUUID(),
       title: taskTitle,
