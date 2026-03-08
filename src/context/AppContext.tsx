@@ -71,6 +71,7 @@ interface AppContextType extends AppState {
   setLoadingMessage: (msg: string) => void;
   restoreVersion: (projectId: string, versionId: string) => void;
   updateLastAssistantMessage: (projectId: string, content: string) => void;
+  updateLastAssistantTask: (projectId: string, task: GenerationTask) => void;
   signOut: () => Promise<void>;
   loadProjects: () => Promise<void>;
 }
