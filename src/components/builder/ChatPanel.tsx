@@ -465,7 +465,7 @@ export function ChatPanel() {
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask Laughable..."
+              placeholder="Ask hikkocode..."
               className="w-full bg-transparent px-3.5 pt-3 pb-1 text-sm text-foreground placeholder:text-muted-foreground outline-none resize-none min-h-[40px] max-h-[200px]"
               disabled={isGenerating}
               rows={1}
