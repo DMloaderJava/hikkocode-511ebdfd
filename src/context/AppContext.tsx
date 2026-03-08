@@ -13,9 +13,9 @@ export interface TaskStep {
   id: string;
   label: string;
   status: "pending" | "in_progress" | "done";
-  type?: "think" | "read" | "plan" | "edit" | "verify" | "default";
-  detail?: string; // e.g. filename being edited
-  duration?: number; // ms elapsed
+  type?: "think" | "read" | "plan" | "edit" | "verify" | "analyze" | "create_file" | "add_styles" | "add_logic" | "add_component" | "configure" | "default";
+  detail?: string;
+  duration?: number;
 }
 
 export interface GenerationTask {
