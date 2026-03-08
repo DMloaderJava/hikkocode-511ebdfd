@@ -88,7 +88,7 @@ export default function Landing() {
       <nav className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg gradient-lovable" />
-          <span className="font-semibold text-lg text-foreground">Laughable</span>
+          <span className="font-semibold text-lg text-foreground">hikkocode</span>
         </div>
         <div className="flex items-center gap-3">
           {user ? (
