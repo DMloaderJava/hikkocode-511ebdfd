@@ -8,6 +8,7 @@ import {
   Lightbulb,
   LayoutGrid,
   Square,
+  StopCircle,
 } from "lucide-react";
 import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/context/AppContext";
 import { useLocation } from "react-router-dom";
@@ -93,6 +94,7 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const location = useLocation();
   const initialPromptHandled = useRef(false);
 
@@ -165,6 +167,13 @@ export function ChatPanel() {
     };
   };
 
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  };
+
   const submitPrompt = async (prompt: string) => {
     if (!prompt.trim() || isGenerating || !activeProject) return;
 
@@ -178,6 +187,9 @@ export function ChatPanel() {
     addMessage(activeProject.id, userMsg);
     setIsGenerating(true);
     setLoadingMessage("Thinking...");
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     // Create task card
     const taskTitle = generateTaskTitle(prompt);
@@ -224,6 +236,7 @@ export function ChatPanel() {
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
         body: JSON.stringify({ messages: history }),
+        signal: controller.signal,
       });
 
       if (!resp.ok) {
@@ -336,11 +349,16 @@ export function ChatPanel() {
 
       updateLastAssistantMessage(activeProject.id, finalDisplay || fullText || "Done!");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      updateLastAssistantMessage(activeProject.id, `⚠️ Something went wrong: ${errorMessage}`);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        updateLastAssistantMessage(activeProject.id, "⏹️ Generation stopped by user.");
+      } else {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        updateLastAssistantMessage(activeProject.id, `⚠️ Something went wrong: ${errorMessage}`);
+      }
       currentTask = completeAllSteps(currentTask, []);
       updateLastAssistantTask(activeProject.id, currentTask);
     } finally {
+      abortControllerRef.current = null;
       setIsGenerating(false);
       setLoadingMessage("");
     }
@@ -470,13 +488,24 @@ export function ChatPanel() {
                 <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Templates">
                   <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isGenerating}
-                  className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
-                >
-                  <ArrowUp className="w-3.5 h-3.5 text-background" />
-                </button>
+                {isGenerating ? (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center ml-1 hover:opacity-80 transition-opacity"
+                    title="Stop generation"
+                  >
+                    <StopCircle className="w-3.5 h-3.5 text-destructive-foreground" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5 text-background" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
