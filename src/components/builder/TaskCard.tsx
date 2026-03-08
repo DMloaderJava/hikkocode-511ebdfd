@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Check,
@@ -25,9 +25,14 @@ interface TaskCardProps {
   onPreviewClick?: () => void;
 }
 
-export function TaskCard({
+export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskCard({
   title,
   steps,
+  toolCount,
+  timestamp,
+  filesChanged,
+  onPreviewClick,
+}, ref) {
   toolCount,
   timestamp,
   filesChanged,
