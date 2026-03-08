@@ -79,7 +79,7 @@ export function GitHubDialog({ open, onClose }: GitHubDialogProps) {
             {/* Connected state */}
             <div className="bg-secondary/50 border border-border rounded-lg p-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-accent" />
+                <div className="w-2 h-2 rounded-full bg-accent>
                 <span className="text-sm font-medium text-foreground">Connected</span>
               </div>
 
@@ -123,7 +123,7 @@ export function GitHubDialog({ open, onClose }: GitHubDialogProps) {
                   onClick={handleCopyClone}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? <Check className="w-3.5 h-3.5 text-greaccent> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
             </div>
