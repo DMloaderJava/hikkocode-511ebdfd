@@ -333,6 +333,64 @@ export function ChatPanel() {
         console.warn("Plan failed, using fallback:", e);
       }
 
+      // === PHASE 1.5: Check if clarification needed ===
+      if (plan) {
+        // Check if plan mentions alternatives user should choose from
+        const alternatives = (plan as any).alternatives as string[] | undefined;
+        if (alternatives && alternatives.length > 1) {
+          setLoadingMessage("🤔 Нужен ваш выбор...");
+          const result = await clarification.askUser({
+            title: "Выберите подход",
+            description: plan.analysis,
+            fields: [{
+              type: "choice",
+              id: "approach",
+              label: "Доступные варианты реализации:",
+              options: [
+                { value: "default", label: plan.approach, description: "Рекомендуемый подход" },
+                ...alternatives.map((alt, i) => ({ value: `alt-${i}`, label: alt, description: "Альтернативный подход" })),
+              ],
+            }],
+          });
+          if (result && result.approach !== "default") {
+            const chosenIdx = parseInt(result.approach.replace("alt-", ""));
+            if (!isNaN(chosenIdx) && alternatives[chosenIdx]) {
+              // Modify the prompt to include the chosen approach
+              prompt = `${prompt}\n\nИспользуй этот подход: ${alternatives[chosenIdx]}`;
+            }
+          }
+          if (!result) {
+            // User cancelled
+            updateLastAssistantMessage(activeProject.id, "⏹️ Отменено пользователем.");
+            currentTask = completeAllSteps(currentTask, []);
+            updateLastAssistantTask(activeProject.id, currentTask);
+            setIsGenerating(false);
+            setLoadingMessage("");
+            return;
+          }
+        }
+
+        // Check if API key is needed but not set
+        const techLower = (plan.technologies || []).map((t: string) => t.toLowerCase());
+        const needsExternalApi = techLower.some((t: string) => 
+          ["openai", "stripe", "firebase", "aws", "twilio", "sendgrid"].includes(t)
+        );
+        if (needsExternalApi && !getStoredApiKey()) {
+          setLoadingMessage("🔑 Требуется API ключ...");
+          const result = await clarification.askUser({
+            title: "Требуется API ключ",
+            description: `Для этого проекта может понадобиться API ключ (${techLower.filter((t: string) => ["openai", "stripe", "firebase"].includes(t)).join(", ")}).`,
+            fields: [
+              { type: "password", id: "apiKey", label: "API Key", placeholder: "sk-...", required: false },
+            ],
+          });
+          if (result?.apiKey) {
+            localStorage.setItem("hikko_gemini_api_key", result.apiKey);
+          }
+          // Continue regardless — key is optional
+        }
+      }
+
       // === PHASE 2: Build task steps from plan ===
       const planStepTime = Date.now() - startTime;
 
