@@ -264,7 +264,7 @@ export async function runAutonomousAgent(
     const sandbox = createSandbox(existingFiles);
     const finalFiles = commitSandbox({ ...sandbox, working: bestFiles });
 
-    emit("applying", "Changes applied", `${newFiles.length} files`);
+    emit("applying", "Changes applied", `${bestFiles.length} files`);
 
     // === PHASE 5: VERIFY (DIFF) ===
     emit("verifying", "Computing diff...");
