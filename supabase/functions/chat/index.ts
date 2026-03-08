@@ -110,8 +110,8 @@ function getGeminiKeys(): string[] {
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
 
-async function callGeminiFallbackStream(messages: Array<{ role: string; content: string }>) {
-  const keys = getGeminiKeys();
+async function callGeminiFallbackStream(messages: Array<{ role: string; content: string }>, temperature: number, customKey?: string) {
+  const keys = customKey ? [customKey, ...getGeminiKeys()] : getGeminiKeys();
   if (keys.length === 0) return null;
 
   const systemInstruction = messages.find((m) => m.role === "system")?.content || "";
@@ -131,7 +131,7 @@ async function callGeminiFallbackStream(messages: Array<{ role: string; content:
           system_instruction: { parts: [{ text: systemInstruction }] },
           contents,
           generationConfig: {
-            temperature: requestTemp,
+            temperature,
             maxOutputTokens: 65536,
           },
         }),
