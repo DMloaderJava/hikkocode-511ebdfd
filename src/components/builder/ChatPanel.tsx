@@ -289,6 +289,16 @@ export function ChatPanel() {
     }
 
     try {
+      // Helper to sleep but respect abort
+      const abortableSleep = (ms: number) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, ms);
+          controller.signal.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        });
+
       // === PHASE 1: Thinking ===
       const thinkStepIdx = currentTask.steps.findIndex(s => s.id === "think");
       if (thinkStepIdx >= 0) {
@@ -296,7 +306,7 @@ export function ChatPanel() {
         currentTask.steps[thinkStepIdx].detail = "Analyzing your request...";
         updateLastAssistantTask(activeProject.id, currentTask);
       }
-      await new Promise(r => setTimeout(r, 600));
+      await abortableSleep(600);
 
       // === PHASE 2: Reading files (if applicable) ===
       const readStepIdx = currentTask.steps.findIndex(s => s.id === "read");
@@ -310,13 +320,12 @@ export function ChatPanel() {
         currentTask.steps[readStepIdx].detail = fileNames;
         updateLastAssistantTask(activeProject.id, currentTask);
         setLoadingMessage("📖 Reading project files...");
-        await new Promise(r => setTimeout(r, 400));
+        await abortableSleep(400);
       }
 
       // === PHASE 3: Planning ===
       const planStepIdx = currentTask.steps.findIndex(s => s.id === "plan");
       if (planStepIdx >= 0) {
-        // Complete previous steps
         for (let i = 0; i < planStepIdx; i++) {
           currentTask.steps[i].status = "done";
           if (!currentTask.steps[i].duration) currentTask.steps[i].duration = Date.now() - startTime;
@@ -325,7 +334,7 @@ export function ChatPanel() {
         currentTask.steps[planStepIdx].detail = "Determining approach...";
         updateLastAssistantTask(activeProject.id, currentTask);
         setLoadingMessage("📋 Creating action plan...");
-        await new Promise(r => setTimeout(r, 500));
+        await abortableSleep(500);
       }
 
       // === Make the actual API call ===
