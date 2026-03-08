@@ -14,6 +14,14 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+export interface VersionSnapshot {
+  id: string;
+  version: number;
+  files: GeneratedFile[];
+  prompt: string;
+  timestamp: Date;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -22,6 +30,7 @@ export interface Project {
   files: GeneratedFile[];
   createdAt: Date;
   version: number;
+  history: VersionSnapshot[];
 }
 
 interface AppState {
@@ -37,9 +46,11 @@ interface AppContextType extends AppState {
   setActiveProject: (project: Project) => void;
   setActiveFile: (file: GeneratedFile | null) => void;
   addMessage: (projectId: string, message: ChatMessage) => void;
-  setFiles: (projectId: string, files: GeneratedFile[]) => void;
+  setFiles: (projectId: string, files: GeneratedFile[], prompt?: string) => void;
   setIsGenerating: (v: boolean) => void;
   setLoadingMessage: (msg: string) => void;
+  restoreVersion: (projectId: string, versionId: string) => void;
+  updateLastAssistantMessage: (projectId: string, content: string) => void;
 }
 
 const funnyLoadingMessages = [
@@ -79,7 +90,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       messages: [],
       files: [],
       createdAt: new Date(),
-      version: 1,
+      version: 0,
+      history: [],
     };
     setState(prev => ({
       ...prev,
@@ -110,13 +122,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setFiles = useCallback((projectId: string, files: GeneratedFile[]) => {
+  const updateLastAssistantMessage = useCallback((projectId: string, content: string) => {
     setState(prev => {
+      const updateMessages = (messages: ChatMessage[]) => {
+        const lastIdx = messages.length - 1;
+        if (lastIdx >= 0 && messages[lastIdx].role === "assistant") {
+          return messages.map((m, i) => i === lastIdx ? { ...m, content } : m);
+        }
+        return [...messages, { id: crypto.randomUUID(), role: "assistant" as const, content, timestamp: new Date() }];
+      };
+
       const projects = prev.projects.map(p =>
-        p.id === projectId ? { ...p, files, version: p.version + 1 } : p
+        p.id === projectId ? { ...p, messages: updateMessages(p.messages) } : p
       );
       const activeProject = prev.activeProject?.id === projectId
-        ? { ...prev.activeProject, files, version: prev.activeProject.version + 1 }
+        ? { ...prev.activeProject, messages: updateMessages(prev.activeProject.messages) }
+        : prev.activeProject;
+      return { ...prev, projects, activeProject };
+    });
+  }, []);
+
+  const setFiles = useCallback((projectId: string, files: GeneratedFile[], prompt?: string) => {
+    setState(prev => {
+      const updateProject = (p: Project): Project => {
+        // Save current version to history before overwriting
+        const snapshot: VersionSnapshot = {
+          id: crypto.randomUUID(),
+          version: p.version,
+          files: p.files,
+          prompt: prompt || "Unknown change",
+          timestamp: new Date(),
+        };
+        const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
+        return { ...p, files, version: p.version + 1, history: newHistory };
+      };
+
+      const projects = prev.projects.map(p =>
+        p.id === projectId ? updateProject(p) : p
+      );
+      const activeProject = prev.activeProject?.id === projectId
+        ? updateProject(prev.activeProject)
+        : prev.activeProject;
+      return { ...prev, projects, activeProject };
+    });
+  }, []);
+
+  const restoreVersion = useCallback((projectId: string, versionId: string) => {
+    setState(prev => {
+      const restoreInProject = (p: Project): Project => {
+        const snapshot = p.history.find(h => h.id === versionId);
+        if (!snapshot) return p;
+        // Save current as a snapshot too
+        const currentSnapshot: VersionSnapshot = {
+          id: crypto.randomUUID(),
+          version: p.version,
+          files: p.files,
+          prompt: `Before restoring to v${snapshot.version}`,
+          timestamp: new Date(),
+        };
+        return {
+          ...p,
+          files: snapshot.files,
+          version: p.version + 1,
+          history: [...p.history, currentSnapshot],
+        };
+      };
+
+      const projects = prev.projects.map(p =>
+        p.id === projectId ? restoreInProject(p) : p
+      );
+      const activeProject = prev.activeProject?.id === projectId
+        ? restoreInProject(prev.activeProject)
         : prev.activeProject;
       return { ...prev, projects, activeProject };
     });
@@ -140,6 +216,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setFiles,
       setIsGenerating,
       setLoadingMessage,
+      restoreVersion,
+      updateLastAssistantMessage,
     }}>
       {children}
     </AppContext.Provider>

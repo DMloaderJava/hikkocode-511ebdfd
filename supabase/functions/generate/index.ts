@@ -52,7 +52,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, existingFiles } = await req.json();
+    const { prompt, existingFiles, stream } = await req.json();
 
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) {
@@ -62,13 +62,11 @@ serve(async (req) => {
       );
     }
 
-    // Build messages
     const messages: Array<{ role: string; parts: Array<{ text: string }> }> = [
       { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
       { role: "model", parts: [{ text: "Understood. I will generate complete web apps as structured JSON with the exact format specified." }] },
     ];
 
-    // Include existing files context if iterating
     if (existingFiles && existingFiles.length > 0) {
       const filesContext = existingFiles
         .map((f: { path: string; content: string }) => `--- ${f.path} ---\n${f.content}`)
@@ -84,6 +82,66 @@ serve(async (req) => {
       });
     }
 
+    // Streaming mode
+    if (stream) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: messages,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 8192,
+              responseMimeType: "application/json",
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Gemini stream error:", response.status, errorText);
+        return new Response(
+          JSON.stringify({ error: `Gemini API error: ${response.status}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Transform Gemini SSE to our SSE format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          const text = new TextDecoder().decode(chunk);
+          const lines = text.split("\n");
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (content) {
+                controller.enqueue(
+                  new TextEncoder().encode(`data: ${JSON.stringify({ text: content })}\n\n`)
+                );
+              }
+            } catch { /* skip partial */ }
+          }
+        },
+        flush(controller) {
+          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        },
+      });
+
+      const streamBody = response.body!.pipeThrough(transformStream);
+
+      return new Response(streamBody, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
+    }
+
+    // Non-streaming mode (fallback)
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -119,12 +177,10 @@ serve(async (req) => {
       );
     }
 
-    // Parse the JSON response
     let parsed;
     try {
       parsed = JSON.parse(textContent);
     } catch {
-      // Try to extract JSON from the response
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
