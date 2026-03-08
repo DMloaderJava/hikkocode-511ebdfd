@@ -6,37 +6,57 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PLANNING_PROMPT = `You are hikkocode AI Agent — an expert full-stack developer that plans before coding.
+const PLANNING_PROMPT = `You are hikkocode AI Agent — an expert full-stack developer that analyzes tasks and creates structured plans.
 
-Analyze the user's request and create a structured action plan. Consider:
-- What files need to be created or modified
-- What technologies/approaches to use
-- What the implementation order should be
+Analyze the user's request and their existing project files. Create a detailed action plan.
 
-You MUST respond with ONLY valid JSON (no markdown, no code fences) in this format:
+You MUST respond with ONLY valid JSON (no markdown, no code fences) in this exact format:
 {
   "analysis": "Brief analysis of what needs to be done",
   "approach": "The technical approach to take",
-  "steps": [
-    { "action": "create_file", "file": "/index.html", "description": "Create HTML structure" },
-    { "action": "add_styles", "file": "/styles.css", "description": "Add CSS styles" },
-    { "action": "add_logic", "file": "/app.js", "description": "Implement JavaScript logic" }
+  "files_to_read": ["path/to/file1.js"],
+  "files_to_edit": ["path/to/file2.js"],
+  "new_files": ["path/to/new_file.js"],
+  "plan": [
+    "Step 1: Description of what to do",
+    "Step 2: Description of what to do"
   ],
   "technologies": ["HTML", "CSS", "JavaScript"]
 }
 
-Valid actions: create_file, edit_file, add_styles, add_logic, add_component, configure, verify
-Keep the plan concise (3-8 steps). Return ONLY the JSON object.`;
+Rules:
+- files_to_read: existing files the agent needs to understand before making changes
+- files_to_edit: existing files that will be modified
+- new_files: files that need to be created from scratch
+- plan: ordered list of human-readable steps (3-8 steps)
+- technologies: libraries/tools to use
+- If no existing files, files_to_read and files_to_edit should be empty arrays
+- For new projects, new_files should include at minimum: index.html, styles.css, app.js
+- Keep analysis and approach concise (1-2 sentences each)
+
+Return ONLY the JSON object, nothing else.`;
 
 function getGeminiKeys(): string[] {
   const raw = Deno.env.get("GEMINI_API_KEYS") || "";
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
 
+function parseJsonResponse(text: string): object | null {
+  try { return JSON.parse(text); } catch { /* continue */ }
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    try { return JSON.parse(fenceMatch[1]); } catch { /* continue */ }
+  }
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try { return JSON.parse(jsonMatch[0]); } catch { /* continue */ }
+  }
+  return null;
+}
+
 async function getPlan(messages: Array<{ role: string; content: string }>): Promise<object | null> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-  // Try gateway first
   if (LOVABLE_API_KEY) {
     try {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -49,21 +69,18 @@ async function getPlan(messages: Array<{ role: string; content: string }>): Prom
           model: "google/gemini-2.5-flash",
           messages,
           max_tokens: 4096,
-          temperature: 0.4,
+          temperature: 0.3,
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
         const content = data.choices?.[0]?.message?.content;
-        if (content) {
-          return parseJsonResponse(content);
-        }
+        if (content) return parseJsonResponse(content);
       } else if (res.status !== 402 && res.status !== 429) {
         console.error("Gateway error:", res.status);
         return null;
       }
-      // Fall through to Gemini on 402/429
     } catch (e) {
       console.error("Gateway error:", e);
     }
@@ -86,7 +103,7 @@ async function getPlan(messages: Array<{ role: string; content: string }>): Prom
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemInstruction }] },
             contents,
-            generationConfig: { temperature: 0.4, maxOutputTokens: 4096 },
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
           }),
         }
       );
@@ -94,41 +111,13 @@ async function getPlan(messages: Array<{ role: string; content: string }>): Prom
       if (res.ok) {
         const data = await res.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          return parseJsonResponse(text);
-        }
+        if (text) return parseJsonResponse(text);
       }
       console.error(`Gemini key failed (${res.status})`);
     } catch (e) {
       console.error("Gemini error:", e);
     }
   }
-
-  return null;
-}
-
-function parseJsonResponse(text: string): object | null {
-  // Try direct parse
-  try {
-    return JSON.parse(text);
-  } catch { /* continue */ }
-
-  // Try extracting from code fences
-  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenceMatch) {
-    try {
-      return JSON.parse(fenceMatch[1]);
-    } catch { /* continue */ }
-  }
-
-  // Try extracting JSON object
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    try {
-      return JSON.parse(jsonMatch[0]);
-    } catch { /* continue */ }
-  }
-
   return null;
 }
 
@@ -154,16 +143,20 @@ serve(async (req) => {
     const plan = await getPlan(messages);
 
     if (!plan) {
-      // Return a sensible fallback plan
+      const isNewProject = !existingFiles || existingFiles.length === 0;
       return new Response(
         JSON.stringify({
           analysis: "Analyzing the request to build the application",
           approach: "Create a complete web application with HTML, CSS, and JavaScript",
-          steps: [
-            { action: "create_file", file: "/index.html", description: "Create HTML structure" },
-            { action: "add_styles", file: "/styles.css", description: "Add CSS styles and layout" },
-            { action: "add_logic", file: "/app.js", description: "Implement JavaScript functionality" },
-            { action: "verify", description: "Verify the application works correctly" },
+          files_to_read: isNewProject ? [] : existingFiles.map((f: any) => f.path),
+          files_to_edit: isNewProject ? [] : existingFiles.map((f: any) => f.path),
+          new_files: isNewProject ? ["/index.html", "/styles.css", "/app.js"] : [],
+          plan: [
+            "Analyze the requirements",
+            "Create HTML structure with semantic elements",
+            "Add CSS styles with responsive design",
+            "Implement JavaScript functionality",
+            "Verify everything works correctly",
           ],
           technologies: ["HTML", "CSS", "JavaScript"],
         }),
@@ -171,7 +164,18 @@ serve(async (req) => {
       );
     }
 
-    return new Response(JSON.stringify(plan), {
+    // Ensure required fields exist
+    const safePlan = {
+      analysis: (plan as any).analysis || "Analyzing request",
+      approach: (plan as any).approach || "Building the application",
+      files_to_read: (plan as any).files_to_read || [],
+      files_to_edit: (plan as any).files_to_edit || [],
+      new_files: (plan as any).new_files || [],
+      plan: (plan as any).plan || [],
+      technologies: (plan as any).technologies || [],
+    };
+
+    return new Response(JSON.stringify(safePlan), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

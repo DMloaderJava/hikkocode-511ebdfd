@@ -22,11 +22,10 @@ const PLAN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/plan`;
 interface AgentPlan {
   analysis: string;
   approach: string;
-  steps: Array<{
-    action: string;
-    file?: string;
-    description: string;
-  }>;
+  files_to_read: string[];
+  files_to_edit: string[];
+  new_files: string[];
+  plan: string[];
   technologies?: string[];
 }
 
@@ -75,27 +74,59 @@ function generateTaskTitle(prompt: string): string {
 
 function planToSteps(plan: AgentPlan): TaskStep[] {
   const steps: TaskStep[] = [
-    { id: "analyze", label: "Analyzing request", status: "done", type: "think", detail: plan.analysis },
-    { id: "plan", label: "Creating action plan", status: "done", type: "plan", detail: plan.approach },
+    { id: "analyze", label: "Analyzed request", status: "done", type: "think", detail: plan.analysis },
   ];
 
-  plan.steps.forEach((s, i) => {
-    const actionMap: Record<string, TaskStep["type"]> = {
-      create_file: "create_file",
-      edit_file: "edit",
-      add_styles: "add_styles",
-      add_logic: "add_logic",
-      add_component: "add_component",
-      configure: "configure",
-      verify: "verify",
-    };
-    steps.push({
-      id: `step-${i}`,
-      label: s.description,
-      status: "pending",
-      type: (actionMap[s.action] || "edit") as TaskStep["type"],
-      detail: s.file,
+  // Add read steps for files_to_read
+  if (plan.files_to_read.length > 0) {
+    plan.files_to_read.forEach((file, i) => {
+      steps.push({
+        id: `read-${i}`,
+        label: `Read ${file.split("/").pop()}`,
+        status: "done",
+        type: "read",
+        detail: file,
+      });
     });
+  }
+
+  // Plan step
+  steps.push({
+    id: "plan",
+    label: "Action plan created",
+    status: "done",
+    type: "plan",
+    detail: `${plan.plan.length} steps · ${plan.files_to_edit.length} edit · ${plan.new_files.length} new`,
+  });
+
+  // Edit steps for existing files
+  plan.files_to_edit.forEach((file, i) => {
+    steps.push({
+      id: `edit-${i}`,
+      label: `Edit ${file.split("/").pop()}`,
+      status: "pending",
+      type: "edit",
+      detail: file,
+    });
+  });
+
+  // Create steps for new files
+  plan.new_files.forEach((file, i) => {
+    steps.push({
+      id: `create-${i}`,
+      label: `Create ${file.split("/").pop()}`,
+      status: "pending",
+      type: "create_file",
+      detail: file,
+    });
+  });
+
+  // Verify step
+  steps.push({
+    id: "verify",
+    label: "Verify output",
+    status: "pending",
+    type: "verify",
   });
 
   return steps;
@@ -110,10 +141,10 @@ function fallbackSteps(prompt: string, hasFiles: boolean): TaskStep[] {
   }
   steps.push(
     { id: "plan", label: "Creating action plan", status: "pending", type: "plan", detail: "Determining approach" },
-    { id: "edit-html", label: "Writing HTML structure", status: "pending", type: "create_file", detail: "/index.html" },
-    { id: "edit-css", label: "Adding styles", status: "pending", type: "add_styles", detail: "/styles.css" },
-    { id: "edit-js", label: "Implementing logic", status: "pending", type: "add_logic", detail: "/app.js" },
-    { id: "verify", label: "Verifying output", status: "pending", type: "verify" },
+    { id: "edit-html", label: "Create index.html", status: "pending", type: "create_file", detail: "/index.html" },
+    { id: "edit-css", label: "Create styles.css", status: "pending", type: "create_file", detail: "/styles.css" },
+    { id: "edit-js", label: "Create app.js", status: "pending", type: "create_file", detail: "/app.js" },
+    { id: "verify", label: "Verify output", status: "pending", type: "verify" },
   );
   return steps;
 }
@@ -296,10 +327,10 @@ export function ChatPanel() {
       // === PHASE 2: Build task steps from plan ===
       const planStepTime = Date.now() - startTime;
 
-      if (plan && plan.steps && plan.steps.length > 0) {
+      if (plan && plan.plan && plan.plan.length > 0) {
         const agentSteps = planToSteps(plan);
         agentSteps[0].duration = planStepTime;
-        agentSteps[1].duration = planStepTime;
+        if (agentSteps.length > 1) agentSteps[1].duration = planStepTime;
 
         currentTask = {
           ...currentTask,
@@ -309,6 +340,10 @@ export function ChatPanel() {
             analysis: plan.analysis,
             approach: plan.approach,
             technologies: plan.technologies,
+            files_to_read: plan.files_to_read,
+            files_to_edit: plan.files_to_edit,
+            new_files: plan.new_files,
+            planSteps: plan.plan,
           },
         } as GenerationTask;
       } else {

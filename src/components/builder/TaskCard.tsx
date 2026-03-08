@@ -20,6 +20,9 @@ import {
   Palette,
   Sparkles,
   Target,
+  FilePlus,
+  FileEdit,
+  Eye,
 } from "lucide-react";
 
 export interface TaskStep {
@@ -42,6 +45,10 @@ interface TaskCardProps {
     analysis: string;
     approach: string;
     technologies?: string[];
+    files_to_read?: string[];
+    files_to_edit?: string[];
+    new_files?: string[];
+    planSteps?: string[];
   };
   onPreviewClick?: () => void;
 }
@@ -101,13 +108,17 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   const isWorking = steps.some((s) => s.status === "in_progress");
   const currentStep = steps.find((s) => s.status === "in_progress");
 
-  // Auto-expand when working
   useEffect(() => {
     if (isWorking && !expanded) setExpanded(true);
   }, [isWorking]);
 
-  // Progress bar
   const progress = steps.length > 0 ? (doneCount / steps.length) * 100 : 0;
+
+  const hasFileInfo = plan && (
+    (plan.files_to_read && plan.files_to_read.length > 0) ||
+    (plan.files_to_edit && plan.files_to_edit.length > 0) ||
+    (plan.new_files && plan.new_files.length > 0)
+  );
 
   return (
     <motion.div
@@ -147,9 +158,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
 
         <div className="flex-1 min-w-0 text-left">
           <div className="flex items-center gap-2">
-            {isWorking && (
-              <Sparkles className="w-3 h-3 text-amber-400 flex-shrink-0" />
-            )}
+            {isWorking && <Sparkles className="w-3 h-3 text-amber-400 flex-shrink-0" />}
             <h3 className="text-sm font-semibold text-foreground truncate">
               {isComplete ? "✨ Agent finished" : isWorking ? (currentStep?.label || "Agent working...") : title}
             </h3>
@@ -160,14 +169,14 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
               </span>
             )}
           </div>
-          
+
           {currentStep?.detail && isWorking && (
             <p className="text-xs text-muted-foreground mt-0.5 truncate font-mono">{currentStep.detail}</p>
           )}
           {isComplete && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {filesChanged && filesChanged.length > 0
-                ? `${filesChanged.length} file${filesChanged.length > 1 ? "s" : ""} changed · ${steps.length} steps completed`
+                ? `${filesChanged.length} file${filesChanged.length > 1 ? "s" : ""} changed · ${steps.length} steps`
                 : `${steps.length} steps completed`}
             </p>
           )}
@@ -183,7 +192,6 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         />
       </button>
 
-      {/* Expanded content */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -194,7 +202,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            {/* AI Plan section */}
+            {/* Agent Plan section */}
             {plan && (
               <div className="border-t border-border">
                 <button
@@ -203,6 +211,9 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                 >
                   <Target className="w-3 h-3 text-amber-400" />
                   <span className="text-amber-400 font-medium">Agent Plan</span>
+                  {plan.planSteps && (
+                    <span className="text-[10px] text-muted-foreground">{plan.planSteps.length} steps</span>
+                  )}
                   <ChevronRight className={`w-3 h-3 ml-auto text-muted-foreground transition-transform ${planExpanded ? "rotate-90" : ""}`} />
                 </button>
                 <AnimatePresence>
@@ -214,15 +225,77 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <div className="px-4 pb-3 space-y-2">
+                      <div className="px-4 pb-3 space-y-3">
+                        {/* Analysis */}
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Analysis</p>
                           <p className="text-xs text-foreground/80 leading-relaxed">{plan.analysis}</p>
                         </div>
+
+                        {/* Approach */}
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Approach</p>
                           <p className="text-xs text-foreground/80 leading-relaxed">{plan.approach}</p>
                         </div>
+
+                        {/* File operations */}
+                        {hasFileInfo && (
+                          <div className="space-y-2">
+                            {plan.files_to_read && plan.files_to_read.length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-blue-400/80 mb-1 flex items-center gap-1">
+                                  <Eye className="w-2.5 h-2.5" /> Files to read
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {plan.files_to_read.map((f, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/10 text-blue-400 font-mono">{f}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {plan.files_to_edit && plan.files_to_edit.length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-amber-400/80 mb-1 flex items-center gap-1">
+                                  <FileEdit className="w-2.5 h-2.5" /> Files to edit
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {plan.files_to_edit.map((f, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-400 font-mono">{f}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {plan.new_files && plan.new_files.length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-emerald-400/80 mb-1 flex items-center gap-1">
+                                  <FilePlus className="w-2.5 h-2.5" /> New files
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {plan.new_files.map((f, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/10 text-emerald-400 font-mono">{f}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Plan steps */}
+                        {plan.planSteps && plan.planSteps.length > 0 && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1.5">Execution plan</p>
+                            <ol className="space-y-1">
+                              {plan.planSteps.map((step, i) => (
+                                <li key={i} className="flex items-start gap-2 text-xs text-foreground/70">
+                                  <span className="text-[10px] text-muted-foreground/50 mt-0.5 w-3 text-right flex-shrink-0">{i + 1}.</span>
+                                  <span>{step}</span>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {/* Technologies */}
                         {plan.technologies && plan.technologies.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {plan.technologies.map((tech, i) => (
@@ -239,7 +312,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
               </div>
             )}
 
-            {/* Steps */}
+            {/* Execution steps */}
             <div className="px-4 pb-3 space-y-1 border-t border-border pt-2">
               {steps.map((step, idx) => {
                 const IconComponent = stepIcons[step.type || "default"] || Circle;
