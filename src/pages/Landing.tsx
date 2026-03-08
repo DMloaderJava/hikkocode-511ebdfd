@@ -199,28 +199,21 @@ export default function Landing() {
       {user && projects.length > 0 && (
         <div className="px-6 pb-16 max-w-6xl mx-auto w-full">
           <div className="bg-card/60 backdrop-blur-sm rounded-2xl border border-border p-6">
-            {/* Tabs header */}
+            {/* Header */}
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-1 bg-secondary/60 rounded-lg p-0.5">
-                <button className="px-3 py-1.5 rounded-md text-xs font-medium bg-card text-foreground shadow-sm">
-                  My projects
-                </button>
-                <button className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Recently viewed
-                </button>
-              </div>
+              <h2 className="text-lg font-semibold text-foreground">Мои проекты</h2>
               <button
                 onClick={() => navigate("/builder")}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Browse all
+                Открыть Builder
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {projects.slice(0, 8).map((project, i) => (
+              {projects.map((project, i) => (
                 <motion.div
                   key={project.id}
                   initial={{ opacity: 0, y: 12 }}
