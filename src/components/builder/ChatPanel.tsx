@@ -131,7 +131,7 @@ export function ChatPanel() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center max-w-sm">
             <div className="w-10 h-10 rounded-xl gradient-lovable mx-auto mb-4 opacity-50" />
-            <p className="text-sm font-medium text-foreground mb-1">Welcome to Laughable</p>
+            <p className="text-sm font-medium text-foreground mb-1">Welcome to hikkocode</p>
             <p className="text-xs text-muted-foreground">
               Create a new project or select one from the sidebar to get started
             </p>
