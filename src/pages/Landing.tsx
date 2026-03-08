@@ -127,7 +127,7 @@ export default function Landing() {
         >
           <h1 className="text-4xl md:text-5xl font-semibold mb-3 text-foreground leading-tight">
             Build something<br />
-            <span className="gradient-lovable-text">Laughable</span>
+            <span className="gradient-lovable-text">hikkocode</span>
           </h1>
           <p className="text-muted-foreground text-base mb-10">
             Create apps and websites by chatting with AI
