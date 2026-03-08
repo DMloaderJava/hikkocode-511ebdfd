@@ -4,49 +4,68 @@ import { FileExplorer } from "@/components/builder/FileExplorer";
 import { CodeViewer } from "@/components/builder/CodeViewer";
 import { LivePreview } from "@/components/builder/LivePreview";
 import { BuildLogs } from "@/components/builder/BuildLogs";
+import { VersionHistory } from "@/components/builder/VersionHistory";
 import { useApp } from "@/context/AppContext";
 import { useState } from "react";
 
 type RightPanel = "preview" | "code";
+type BottomPanel = "logs" | "history";
 
 export default function Builder() {
   const { activeFile } = useApp();
   const [rightPanel, setRightPanel] = useState<RightPanel>("preview");
+  const [bottomPanel, setBottomPanel] = useState<BottomPanel>("logs");
 
-  // Auto-switch to code when a file is selected
   const effectivePanel = activeFile ? "code" : rightPanel;
 
   return (
     <div className="h-screen flex overflow-hidden bg-background">
-      {/* Left: Project Sidebar */}
       <ProjectSidebar />
 
-      {/* Center: Chat + File Explorer */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="flex flex-1 min-h-0">
-          {/* File explorer */}
           <div className="w-52 border-r border-border overflow-y-auto scrollbar-thin bg-card/50">
             <FileExplorer />
           </div>
-
-          {/* Chat */}
           <div className="flex-1 flex flex-col min-w-0 border-r border-border">
             <ChatPanel />
           </div>
         </div>
 
-        {/* Bottom: Build Logs */}
-        <div className="h-36 border-t border-border">
-          <BuildLogs />
+        {/* Bottom: Tabs for Logs / History */}
+        <div className="h-40 border-t border-border flex flex-col">
+          <div className="flex items-center border-b border-border bg-card/50">
+            <button
+              onClick={() => setBottomPanel("logs")}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                bottomPanel === "logs"
+                  ? "text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Build Logs
+            </button>
+            <button
+              onClick={() => setBottomPanel("history")}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                bottomPanel === "history"
+                  ? "text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Version History
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {bottomPanel === "logs" ? <BuildLogs /> : <VersionHistory />}
+          </div>
         </div>
       </div>
 
-      {/* Right: Preview or Code */}
       <div className="w-[45%] flex flex-col min-w-0">
-        {/* Tab bar */}
         <div className="flex items-center border-b border-border bg-card/50">
           <button
-            onClick={() => { setRightPanel("preview"); }}
+            onClick={() => setRightPanel("preview")}
             className={`px-4 py-2.5 text-sm font-medium transition-colors ${
               effectivePanel === "preview"
                 ? "text-primary border-b-2 border-primary"
