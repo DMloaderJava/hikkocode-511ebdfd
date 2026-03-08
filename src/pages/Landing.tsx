@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
-import { ArrowUp, Plus, MessageCircle, Lightbulb, FolderOpen, Star, Clock, ArrowRight } from "lucide-react";
+import { ArrowUp, Plus, MessageCircle, Key, FolderOpen, Star, Clock, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, FormEvent } from "react";
 import { useApp } from "@/context/AppContext";
+import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 
 function ProjectCard({ project, onClick }: { project: any; onClick: () => void }) {
   const timeAgo = (date: Date) => {
