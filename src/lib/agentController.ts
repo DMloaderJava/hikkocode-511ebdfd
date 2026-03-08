@@ -135,19 +135,49 @@ export async function runAutonomousAgent(
       emit("reading", "Read all project files", `${existingFiles.length} files`);
     }
 
-    // === PHASE 3: GENERATE CHANGES ===
-    emit("generating", "AI is writing code...");
+    // === PHASE 3: GENERATE CHANGES (with iterative refinement) ===
+    emit("generating", "AI is writing code (iteration 1)...");
 
-    const messages = [
-      ...(context ? [{ role: "user" as const, content: `Current project files:\n\n${context}\n\nUser request: ${prompt}` }] : [{ role: "user" as const, content: prompt }]),
-    ];
+    const MAX_ITERATIONS = 3;
+    let bestFiles: GeneratedFile[] | null = null;
+    let fullText = "";
 
-    const resp = await fetch(CHAT_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ messages }),
-      signal: callbacks.signal,
-    });
+    for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
+      const isFirstIteration = iteration === 1;
+      const temperature = isFirstIteration ? 0.3 : 0.5; // low for code, slightly higher for refinement
+
+      const iterMessages = isFirstIteration
+        ? [
+            {
+              role: "user" as const,
+              content: context
+                ? `Current project files:\n\n${context}\n\nUser request: ${prompt}`
+                : prompt,
+            },
+          ]
+        : [
+            {
+              role: "user" as const,
+              content: context
+                ? `Current project files:\n\n${context}\n\nUser request: ${prompt}`
+                : prompt,
+            },
+            {
+              role: "assistant" as const,
+              content: fullText,
+            },
+            {
+              role: "user" as const,
+              content: `Оцени своё решение выше. Найди слабые места, баги, проблемы с производительностью или UX. Предложи улучшения и верни ПОЛНОСТЬЮ улучшенную версию файлов в том же JSON формате. Попробуй нестандартный подход если это улучшит результат.`,
+            },
+          ];
+
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ messages: iterMessages, temperature }),
+        signal: callbacks.signal,
+      });
 
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({}));
