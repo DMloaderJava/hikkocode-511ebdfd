@@ -131,7 +131,7 @@ async function callGeminiFallbackStream(messages: Array<{ role: string; content:
           system_instruction: { parts: [{ text: systemInstruction }] },
           contents,
           generationConfig: {
-            temperature: 0.7,
+            temperature: requestTemp,
             maxOutputTokens: 65536,
           },
         }),

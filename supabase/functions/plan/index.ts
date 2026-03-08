@@ -193,6 +193,7 @@ serve(async (req) => {
       new_files: (plan as any).new_files || [],
       plan: (plan as any).plan || [],
       technologies: (plan as any).technologies || [],
+      alternatives: (plan as any).alternatives || [],
     };
 
     return new Response(JSON.stringify(safePlan), {
