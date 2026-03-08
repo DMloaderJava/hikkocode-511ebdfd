@@ -206,8 +206,9 @@ export function ChatPanel() {
 
     // Show task card immediately with first step active
     currentTask = advanceTaskStep(currentTask, 0);
+    const assistantMsgId = crypto.randomUUID();
     addMessage(activeProject.id, {
-      id: crypto.randomUUID(),
+      id: assistantMsgId,
       role: "assistant",
       content: "",
       timestamp: new Date(),
