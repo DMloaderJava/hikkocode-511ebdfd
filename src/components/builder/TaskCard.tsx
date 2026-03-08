@@ -103,11 +103,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   filesChanged,
   thinkingTime,
   plan,
+  diffs,
+  diffSummaryText,
   onPreviewClick,
 }, ref) {
   const [expanded, setExpanded] = useState(false);
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [planExpanded, setPlanExpanded] = useState(false);
+  const [diffExpanded, setDiffExpanded] = useState(false);
+  const [expandedDiffFile, setExpandedDiffFile] = useState<string | null>(null);
 
   const doneCount = steps.filter((s) => s.status === "done").length;
   const isComplete = doneCount === steps.length && steps.length > 0;
