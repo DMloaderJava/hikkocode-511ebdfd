@@ -112,7 +112,7 @@ async function getPlan(messages: Array<{ role: string; content: string }>): Prom
           body: JSON.stringify({
             system_instruction: { parts: [{ text: systemInstruction }] },
             contents,
-            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
+            generationConfig: { temperature: 0.9, maxOutputTokens: 4096 },
           }),
         }
       );
