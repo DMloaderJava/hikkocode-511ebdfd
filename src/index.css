@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Highlight.js theme - works with both light and dark modes */
+.hljs {
+  color: hsl(var(--foreground));
+  background: transparent;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-title,
+.hljs-section,
+.hljs-doctag,
+.hljs-name,
+.hljs-strong { color: #c678dd; font-weight: 500; }
+.hljs-string,
+.hljs-attr { color: #98c379; }
+.hljs-number,
+.hljs-literal { color: #d19a66; }
+.hljs-comment,
+.hljs-quote { color: hsl(var(--muted-foreground)); font-style: italic; }
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag { color: #e06c75; }
+.hljs-type,
+.hljs-built_in { color: #e5c07b; }
+.hljs-attribute { color: #61afef; }
+.hljs-params { color: hsl(var(--foreground)); }
+.hljs-meta { color: #56b6c2; }
+.hljs-function .hljs-title { color: #61afef; }
+.hljs-selector-class,
+.hljs-selector-id { color: #e06c75; }
+.hljs-property { color: #61afef; }
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @layer base {
