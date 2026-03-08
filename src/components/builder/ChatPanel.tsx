@@ -845,6 +845,12 @@ export function ChatPanel() {
           </div>
         </form>
       </div>
+
+      <ClarificationDialog
+        request={clarification.request}
+        onSubmit={clarification.handleSubmit}
+        onCancel={clarification.handleCancel}
+      />
     </div>
   );
 }
