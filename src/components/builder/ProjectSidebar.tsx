@@ -1,6 +1,6 @@
 import { useApp } from "@/context/AppContext";
-import { Plus, FolderOpen, Settings, Home, PanelLeftClose, LogOut } from "lucide-react";
-import { useState } from "react";
+import { Plus, FolderOpen, Settings, Home, PanelLeftClose, LogOut, Moon, Sun } from "lucide-react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 
