@@ -576,6 +576,7 @@ export function ChatPanel() {
                           steps={msg.task.steps}
                           toolCount={msg.task.toolCount}
                           filesChanged={msg.task.filesChanged}
+                          thinkingTime={msg.task.thinkingTime}
                           timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         />
                       )}
