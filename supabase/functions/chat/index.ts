@@ -152,7 +152,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const { messages, temperature } = await req.json();
+    const requestTemp = typeof temperature === "number" ? temperature : 0.3;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
@@ -176,7 +177,7 @@ serve(async (req) => {
           messages: apiMessages,
           stream: true,
           max_tokens: 65536,
-          temperature: 0.7,
+          temperature: requestTemp,
         }),
       });
 
