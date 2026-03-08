@@ -149,7 +149,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, existingFiles, stream } = await req.json();
+    const { prompt, existingFiles, stream, customApiKey } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const messages = buildMessages(prompt, existingFiles);
 
