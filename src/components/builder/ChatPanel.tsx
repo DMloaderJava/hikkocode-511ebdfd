@@ -90,6 +90,7 @@ export function ChatPanel() {
     loadingMessage,
     updateLastAssistantMessage,
     updateLastAssistantTask,
+    persistAssistantMessage,
   } = useApp();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
