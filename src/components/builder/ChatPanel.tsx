@@ -426,7 +426,7 @@ export function ChatPanel() {
                           <div className="w-6 h-6 rounded-md gradient-lovable flex items-center justify-center flex-shrink-0 mt-0.5">
                             <Bot className="w-3 h-3 text-white" />
                           </div>
-                          <div className="max-w-[88%] text-sm text-foreground leading-relaxed prose prose-sm prose-stone [&>*:first-child]:mt-0">
+                          <div className="max-w-[88%] text-sm text-foreground leading-relaxed prose prose-sm dark:prose-invert prose-stone dark:prose-stone [&>*:first-child]:mt-0 [&_pre]:bg-secondary [&_pre]:rounded-lg [&_pre]:p-3 [&_code]:text-xs [&_code]:bg-secondary [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_p]:text-foreground [&_strong]:text-foreground [&_li]:text-foreground [&_a]:text-primary">
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
                           </div>
                         </div>
