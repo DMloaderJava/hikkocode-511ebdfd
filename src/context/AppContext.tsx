@@ -78,21 +78,21 @@ interface AppContextType extends AppState {
 }
 
 export const funnyLoadingMessages = [
-  "🎨 Convincing CSS to align divs...",
-  "🧠 Teaching AI what flexbox means...",
-  "🔮 Consulting the Stack Overflow oracle...",
-  "☕ Brewing artisanal JavaScript...",
-  "🐛 Pre-debugging your bugs...",
-  "🎭 Negotiating with TypeScript compiler...",
-  "🌈 Adding just the right amount of border-radius...",
-  "🏗️ Building with digital Legos...",
-  "🤖 AI is having an existential crisis about semicolons...",
-  "📐 Measuring pixels with a ruler...",
-  "🎪 Training hamsters to run the dev server...",
-  "🧙 Casting `npm install` spell...",
-  "🍕 Ordering pizza for the deployment team...",
-  "💅 Applying final coat of CSS polish...",
-  "🚀 Strapping rockets to your divs...",
+  "🎨 Crafting the UI layout...",
+  "🧠 Analyzing your requirements...",
+  "⚡ Writing JavaScript logic...",
+  "☕ Brewing fresh CSS styles...",
+  "🐛 Pre-checking for bugs...",
+  "🎭 Optimizing for responsiveness...",
+  "🌈 Applying design tokens...",
+  "🏗️ Assembling components...",
+  "📐 Perfecting the layout grid...",
+  "🧙 Generating clean code...",
+  "💅 Polishing the interface...",
+  "🚀 Almost ready to preview...",
+  "🔧 Wiring up event handlers...",
+  "📦 Bundling everything together...",
+  "✨ Adding finishing touches...",
 ];
 
 const AppContext = createContext<AppContextType | null>(null);

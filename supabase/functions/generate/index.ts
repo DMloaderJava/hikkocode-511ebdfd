@@ -6,9 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are Laughable AI, a parody app builder. You generate complete web apps as structured JSON.
+const SYSTEM_PROMPT = `You are hikkocode AI — an expert full-stack web developer. You generate complete, production-quality web applications.
 
-When the user describes an app, generate ALL the files needed. Return ONLY valid JSON (no markdown, no code fences) in this exact format:
+OUTPUT FORMAT: Return ONLY valid JSON (no markdown, no code fences, no explanation) in this exact format:
 
 {
   "files": [
@@ -22,29 +22,65 @@ When the user describes an app, generate ALL the files needed. Return ONLY valid
       "name": "styles.css",
       "path": "/styles.css",
       "language": "css",
-      "content": "* { margin: 0; ... }"
+      "content": "..."
     },
     {
       "name": "app.js",
       "path": "/app.js",
       "language": "javascript",
-      "content": "console.log('hello');"
+      "content": "..."
     }
   ]
 }
 
-Rules:
-1. ALWAYS include index.html, styles.css, and app.js at minimum.
-2. The HTML must link to styles.css and include a script tag for app.js.
-3. Use modern, clean styling. Dark theme with accent colors.
-4. Make the app fully functional with vanilla HTML/CSS/JS.
-5. Use emoji accents in the UI for personality.
-6. Include a footer saying "Built with Laughable AI 🤖".
-7. If the user asks to modify existing files, return the COMPLETE updated files (not diffs).
-8. The CSS link must use: <link rel="stylesheet" href="styles.css" />
-9. The JS script must use: <script src="app.js"></script>
-10. Make apps interactive and visually polished.
-11. Return ONLY the JSON object, nothing else. No explanation, no markdown.`;
+## MANDATORY RULES:
+
+### Files
+- ALWAYS include at minimum: index.html, styles.css, app.js.
+- HTML must use: <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script>
+- For complex apps, add additional JS modules (utils.js, api.js, components.js).
+- When modifying existing files, return COMPLETE updated files.
+
+### HTML
+- Semantic HTML5: <header>, <main>, <nav>, <section>, <article>, <footer>.
+- Proper <meta charset="UTF-8">, <meta name="viewport">.
+- Meaningful class names. Accessibility: aria-labels, alt text, focus states.
+
+### CSS
+- CSS custom properties for theming (--color-primary, --spacing-md, etc.).
+- Mobile-first responsive design with breakpoints.
+- CSS Grid + Flexbox for layouts.
+- Dark theme by default with professional color palette.
+- Smooth transitions, subtle animations.
+- Consistent spacing (4/8/16/24/32/48px scale).
+- box-sizing: border-box globally.
+
+### JavaScript
+- Modern ES6+: const/let, arrow functions, template literals, async/await.
+- DOMContentLoaded wrapper.
+- addEventListener (no inline handlers).
+- Proper error handling with try/catch.
+- Loading states, empty states, error states.
+- localStorage for data persistence.
+- Form validation with user feedback.
+- Debounce/throttle where needed.
+
+### Design Quality
+- Professional, polished UI — production-grade.
+- Typography hierarchy, consistent spacing.
+- Interactive feedback: hover, active, focus, disabled states.
+- Toast/notification system for user actions.
+- Smooth animations and micro-interactions.
+- Empty states with helpful messages.
+
+### Functionality
+- Apps MUST be fully functional, not mockups.
+- Full CRUD where applicable.
+- Search, filter, sort where relevant.
+- Keyboard navigation support.
+- Proper state management.
+
+Return ONLY the JSON object. No extra text.`;
 
 function buildMessages(prompt: string, existingFiles?: Array<{ path: string; content: string }>) {
   const messages: Array<{ role: string; content: string }> = [
@@ -56,10 +92,10 @@ function buildMessages(prompt: string, existingFiles?: Array<{ path: string; con
       .join("\n\n");
     messages.push({
       role: "user",
-      content: `Here are the current project files:\n\n${filesContext}\n\nNow apply this change: ${prompt}`,
+      content: `Current project files:\n\n${filesContext}\n\nApply this change: ${prompt}\n\nReturn the complete updated files as JSON.`,
     });
   } else {
-    messages.push({ role: "user", content: `Build this app: ${prompt}` });
+    messages.push({ role: "user", content: `Build this app: ${prompt}\n\nReturn all files as JSON.` });
   }
   return messages;
 }
@@ -73,7 +109,6 @@ async function callGeminiFallback(messages: Array<{ role: string; content: strin
   const keys = getGeminiKeys();
   if (keys.length === 0) return null;
 
-  // Convert messages to Gemini format
   const systemInstruction = messages.find((m) => m.role === "system")?.content || "";
   const contents = messages
     .filter((m) => m.role !== "system")
@@ -92,6 +127,10 @@ async function callGeminiFallback(messages: Array<{ role: string; content: strin
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemInstruction }] },
           contents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 65536,
+          },
         }),
       });
 
@@ -126,7 +165,13 @@ serve(async (req) => {
             Authorization: `Bearer ${LOVABLE_API_KEY}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ model: "google/gemini-3.1-pro-preview", messages, stream: true }),
+          body: JSON.stringify({
+            model: "google/gemini-3.1-pro-preview",
+            messages,
+            stream: true,
+            max_tokens: 65536,
+            temperature: 0.7,
+          }),
         });
 
         if (response.status === 402 || response.status === 429) {
@@ -154,7 +199,6 @@ serve(async (req) => {
           );
         }
 
-        // Transform Gemini SSE to our format
         const transformStream = new TransformStream({
           transform(chunk, controller) {
             const text = new TextDecoder().decode(chunk);
@@ -185,7 +229,6 @@ serve(async (req) => {
         });
       }
 
-      // Transform OpenAI-compatible SSE to our format (Lovable gateway)
       const transformStream = new TransformStream({
         transform(chunk, controller) {
           const text = new TextDecoder().decode(chunk);
@@ -229,7 +272,12 @@ serve(async (req) => {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model: "google/gemini-3.1-pro-preview", messages }),
+        body: JSON.stringify({
+          model: "google/gemini-3.1-pro-preview",
+          messages,
+          max_tokens: 65536,
+          temperature: 0.7,
+        }),
       });
 
       if (response.status === 402 || response.status === 429) {
