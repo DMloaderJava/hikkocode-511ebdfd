@@ -488,13 +488,24 @@ export function ChatPanel() {
                 <button type="button" className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Templates">
                   <LayoutGrid className="w-3.5 h-3.5" />
                 </button>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isGenerating}
-                  className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
-                >
-                  <ArrowUp className="w-3.5 h-3.5 text-background" />
-                </button>
+                {isGenerating ? (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center ml-1 hover:opacity-80 transition-opacity"
+                    title="Stop generation"
+                  >
+                    <StopCircle className="w-3.5 h-3.5 text-destructive-foreground" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5 text-background" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
