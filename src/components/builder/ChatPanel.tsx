@@ -311,7 +311,11 @@ export function ChatPanel() {
           },
           body: JSON.stringify({
             prompt: prompt.trim(),
-            existingFiles: activeProject.files.map(f => ({ path: f.path, language: f.language })),
+            existingFiles: activeProject.files.map(f => ({
+              path: f.path,
+              language: f.language,
+              content: f.content,
+            })),
           }),
           signal: controller.signal,
         });

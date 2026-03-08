@@ -8,7 +8,12 @@ const corsHeaders = {
 
 const PLANNING_PROMPT = `You are hikkocode AI Agent — an expert full-stack developer that analyzes tasks and creates structured plans.
 
-Analyze the user's request and their existing project files. Create a detailed action plan.
+You have access to the user's existing project files (their full content is provided). Analyze the code carefully before planning changes.
+
+## Your job:
+1. READ and UNDERSTAND the existing code
+2. IDENTIFY which files need to be read, edited, or created
+3. CREATE a step-by-step plan
 
 You MUST respond with ONLY valid JSON (no markdown, no code fences) in this exact format:
 {
@@ -33,6 +38,7 @@ Rules:
 - If no existing files, files_to_read and files_to_edit should be empty arrays
 - For new projects, new_files should include at minimum: index.html, styles.css, app.js
 - Keep analysis and approach concise (1-2 sentences each)
+- When existing code is provided, reference specific functions/elements you'll modify
 
 Return ONLY the JSON object, nothing else.`;
 
@@ -131,8 +137,20 @@ serve(async (req) => {
 
     let userContent = prompt;
     if (existingFiles && existingFiles.length > 0) {
-      const fileList = existingFiles.map((f: any) => `- ${f.path} (${f.language})`).join("\n");
-      userContent = `Existing project files:\n${fileList}\n\nUser request: ${prompt}`;
+      // Build file context with actual content when available
+      const fileEntries = existingFiles.map((f: any) => {
+        if (f.content) {
+          return `--- ${f.path} (${f.language}) ---\n${f.content}`;
+        }
+        return `- ${f.path} (${f.language})`;
+      });
+
+      const hasContent = existingFiles.some((f: any) => f.content);
+      const header = hasContent
+        ? "Existing project files with content:"
+        : "Existing project files:";
+
+      userContent = `${header}\n\n${fileEntries.join("\n\n")}\n\nUser request: ${prompt}`;
     }
 
     const messages = [
@@ -164,7 +182,6 @@ serve(async (req) => {
       );
     }
 
-    // Ensure required fields exist
     const safePlan = {
       analysis: (plan as any).analysis || "Analyzing request",
       approach: (plan as any).approach || "Building the application",
