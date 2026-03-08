@@ -22,11 +22,10 @@ const PLAN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/plan`;
 interface AgentPlan {
   analysis: string;
   approach: string;
-  steps: Array<{
-    action: string;
-    file?: string;
-    description: string;
-  }>;
+  files_to_read: string[];
+  files_to_edit: string[];
+  new_files: string[];
+  plan: string[];
   technologies?: string[];
 }
 
