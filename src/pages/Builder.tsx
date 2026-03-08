@@ -200,6 +200,9 @@ export default function Builder() {
           </div>
         </div>
       </div>
+
+      {/* Publish Dialog */}
+      <PublishDialog open={showPublish} onClose={() => setShowPublish(false)} />
     </div>
   );
 }
