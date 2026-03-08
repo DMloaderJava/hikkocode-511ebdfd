@@ -172,6 +172,7 @@ export function ChatPanel() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const location = useLocation();
   const initialPromptHandled = useRef(false);
+  const clarification = useClarification();
 
   useEffect(() => {
     if (scrollRef.current) {
