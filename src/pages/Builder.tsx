@@ -195,6 +195,17 @@ export default function Builder() {
             >
               <GitBranch className="w-3.5 h-3.5" />
             </button>
+            <button
+              onClick={() => { setRightView("agent"); setActiveFile(null); }}
+              className={`p-1.5 rounded-md transition-all hidden sm:block ${
+                effectiveView === "agent"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Agent Tasks"
+            >
+              <Bot className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Center-right: Device toggles + URL */}
