@@ -7,6 +7,7 @@ import { PublishDialog } from "@/components/builder/PublishDialog";
 import { BuildLogs } from "@/components/builder/BuildLogs";
 import { VersionHistory } from "@/components/builder/VersionHistory";
 import { GitHubDialog } from "@/components/builder/GitHubDialog";
+import { AgentTasksPanel } from "@/components/builder/AgentTasksPanel";
 import { useApp } from "@/context/AppContext";
 import { useState, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -26,6 +27,7 @@ import {
   ExternalLink,
   Slash,
   Github,
+  Bot,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type RightView = "preview" | "code" | "terminal" | "history";
+type RightView = "preview" | "code" | "terminal" | "history" | "agent";
 
 export default function Builder() {
   const { activeFile, activeProject, setActiveFile, isGenerating, projects, setActiveProject } = useApp();
@@ -193,6 +195,17 @@ export default function Builder() {
             >
               <GitBranch className="w-3.5 h-3.5" />
             </button>
+            <button
+              onClick={() => { setRightView("agent"); setActiveFile(null); }}
+              className={`p-1.5 rounded-md transition-all hidden sm:block ${
+                effectiveView === "agent"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Agent Tasks"
+            >
+              <Bot className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Center-right: Device toggles + URL */}
@@ -289,6 +302,10 @@ export default function Builder() {
                 <div className="flex-1 min-w-0 bg-secondary/20">
                   <VersionHistory />
                 </div>
+              ) : effectiveView === "agent" ? (
+                <div className="flex-1 min-w-0 bg-secondary/20">
+                  <AgentTasksPanel />
+                </div>
               ) : (
                 <ChatPanel />
               )}
@@ -312,6 +329,7 @@ export default function Builder() {
                   {effectiveView === "code" && <CodeViewer />}
                   {effectiveView === "terminal" && <BuildLogs />}
                   {effectiveView === "history" && <VersionHistory />}
+                  {effectiveView === "agent" && <AgentTasksPanel />}
                 </div>
               </div>
             </>

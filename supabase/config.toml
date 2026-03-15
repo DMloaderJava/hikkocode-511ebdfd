@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.plan]
 verify_jwt = false
+
+[functions.agent]
+verify_jwt = false
+
+[functions.indexer]
+verify_jwt = false

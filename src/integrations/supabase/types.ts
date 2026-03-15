@@ -14,6 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_tasks: {
+        Row: {
+          branch: string | null
+          build_log: string | null
+          commit_sha: string | null
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          files_changed: string[] | null
+          id: string
+          iterations: number | null
+          max_iterations: number | null
+          patches: Json | null
+          plan: Json | null
+          pr_number: number | null
+          pr_url: string | null
+          project_id: string
+          repo: string | null
+          started_at: string | null
+          status: string
+          test_log: string | null
+          updated_at: string
+          user_id: string
+          user_request: string
+        }
+        Insert: {
+          branch?: string | null
+          build_log?: string | null
+          commit_sha?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          files_changed?: string[] | null
+          id?: string
+          iterations?: number | null
+          max_iterations?: number | null
+          patches?: Json | null
+          plan?: Json | null
+          pr_number?: number | null
+          pr_url?: string | null
+          project_id: string
+          repo?: string | null
+          started_at?: string | null
+          status?: string
+          test_log?: string | null
+          updated_at?: string
+          user_id: string
+          user_request: string
+        }
+        Update: {
+          branch?: string | null
+          build_log?: string | null
+          commit_sha?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          files_changed?: string[] | null
+          id?: string
+          iterations?: number | null
+          max_iterations?: number | null
+          patches?: Json | null
+          plan?: Json | null
+          pr_number?: number | null
+          pr_url?: string | null
+          project_id?: string
+          repo?: string | null
+          started_at?: string | null
+          status?: string
+          test_log?: string | null
+          updated_at?: string
+          user_id?: string
+          user_request?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      applied_patches: {
+        Row: {
+          action: string
+          applied_at: string
+          file_path: string
+          full_content: string | null
+          id: string
+          patch_content: string | null
+          reverted: boolean | null
+          reverted_at: string | null
+          task_id: string
+        }
+        Insert: {
+          action?: string
+          applied_at?: string
+          file_path: string
+          full_content?: string | null
+          id?: string
+          patch_content?: string | null
+          reverted?: boolean | null
+          reverted_at?: string | null
+          task_id: string
+        }
+        Update: {
+          action?: string
+          applied_at?: string
+          file_path?: string
+          full_content?: string | null
+          id?: string
+          patch_content?: string | null
+          reverted?: boolean | null
+          reverted_at?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applied_patches_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "agent_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           content: string
@@ -39,6 +166,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "chat_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_index: {
+        Row: {
+          created_at: string
+          dependencies: Json | null
+          embedding: Json | null
+          file_path: string
+          hash: string | null
+          id: string
+          language: string
+          last_indexed_at: string
+          project_id: string
+          size_bytes: number | null
+          summary: string | null
+          symbols: Json | null
+        }
+        Insert: {
+          created_at?: string
+          dependencies?: Json | null
+          embedding?: Json | null
+          file_path: string
+          hash?: string | null
+          id?: string
+          language?: string
+          last_indexed_at?: string
+          project_id: string
+          size_bytes?: number | null
+          summary?: string | null
+          symbols?: Json | null
+        }
+        Update: {
+          created_at?: string
+          dependencies?: Json | null
+          embedding?: Json | null
+          file_path?: string
+          hash?: string | null
+          id?: string
+          language?: string
+          last_indexed_at?: string
+          project_id?: string
+          size_bytes?: number | null
+          summary?: string | null
+          symbols?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_index_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -143,6 +323,44 @@ export type Database = {
           version?: number
         }
         Relationships: []
+      }
+      task_logs: {
+        Row: {
+          created_at: string
+          detail: Json | null
+          id: string
+          level: string
+          message: string
+          phase: string | null
+          task_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          level?: string
+          message: string
+          phase?: string | null
+          task_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json | null
+          id?: string
+          level?: string
+          message?: string
+          phase?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_logs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "agent_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       version_snapshots: {
         Row: {
