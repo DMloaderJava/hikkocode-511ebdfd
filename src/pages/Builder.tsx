@@ -329,6 +329,7 @@ export default function Builder() {
                   {effectiveView === "code" && <CodeViewer />}
                   {effectiveView === "terminal" && <BuildLogs />}
                   {effectiveView === "history" && <VersionHistory />}
+                  {effectiveView === "agent" && <AgentTasksPanel />}
                 </div>
               </div>
             </>
