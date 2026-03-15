@@ -302,6 +302,10 @@ export default function Builder() {
                 <div className="flex-1 min-w-0 bg-secondary/20">
                   <VersionHistory />
                 </div>
+              ) : effectiveView === "agent" ? (
+                <div className="flex-1 min-w-0 bg-secondary/20">
+                  <AgentTasksPanel />
+                </div>
               ) : (
                 <ChatPanel />
               )}
