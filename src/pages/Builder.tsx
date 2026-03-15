@@ -34,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type RightView = "preview" | "code" | "terminal" | "history";
+type RightView = "preview" | "code" | "terminal" | "history" | "agent";
 
 export default function Builder() {
   const { activeFile, activeProject, setActiveFile, isGenerating, projects, setActiveProject } = useApp();
