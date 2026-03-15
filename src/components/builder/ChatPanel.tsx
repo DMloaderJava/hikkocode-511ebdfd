@@ -427,225 +427,116 @@ export function ChatPanel() {
       setLoadingMessage("📋 Plan ready, executing...");
       await abortableSleep(300);
 
-      // === PHASE 3: EXECUTE — Call chat API ===
-      // Find first non-done step and activate it
-      const firstPendingIdx = currentTask.steps.findIndex(s => s.status === "pending");
-      if (firstPendingIdx >= 0) {
-        currentTask = advanceTaskStep(currentTask, firstPendingIdx);
-        updateLastAssistantTask(activeProject.id, currentTask);
-      }
+      // === PHASE 3: EXECUTE — Per-file generation ===
       setLoadingMessage("✏️ Agent is writing code...");
 
-      const history = [
-        ...buildConversationHistory(),
-        { role: "user" as const, content: prompt.trim() },
-      ];
+      const perFilePlan = plan
+        ? buildFileTasks(plan)
+        : { approach: "Generate standard web app files", planSteps: ["Create project files"], fileTasks: [
+            { path: "/index.html", action: "create" as const },
+            { path: "/styles.css", action: "create" as const },
+            { path: "/app.js", action: "create" as const },
+          ]};
 
-      // Build smart context: use plan data to prioritize relevant files
-      if (activeProject.files.length > 0) {
-        let filesContext: string;
-        if (plan && (plan.files_to_read.length > 0 || plan.files_to_edit.length > 0)) {
-          // Smart context: full content for files agent needs, summaries for rest
-          filesContext = buildSmartContext(
-            activeProject.files,
-            plan.files_to_read,
-            plan.files_to_edit
-          );
-        } else {
-          // No plan data — send everything
-          filesContext = buildFullContext(activeProject.files);
+      // Map plan file tasks to step IDs
+      const fileStepMap = new Map<string, number>();
+      currentTask.steps.forEach((step, idx) => {
+        if (step.detail && (step.type === "edit" || step.type === "create_file")) {
+          fileStepMap.set(step.detail, idx);
         }
-        history[history.length - 1] = {
-          role: "user",
-          content: `Current project files:\n\n${filesContext}\n\nUser request: ${prompt.trim()}`,
-        };
-      }
-
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ messages: history, temperature: 0.3, customApiKey: getStoredApiKey() }),
-        signal: controller.signal,
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({}));
-        const errorMsg = errData.error || `Error ${resp.status}`;
-        updateLastAssistantMessage(activeProject.id, `⚠️ ${errorMsg}`);
-        currentTask = completeAllSteps(currentTask, []);
-        updateLastAssistantTask(activeProject.id, currentTask);
-        setIsGenerating(false);
-        setLoadingMessage("");
-        return;
-      }
-
-      if (!resp.body) throw new Error("No response body");
-
-      // === PHASE 4: Stream response and advance steps ===
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-      let textBuffer = "";
-
-      // Calculate step advancement thresholds
-      const pendingSteps = currentTask.steps.filter(s => s.status !== "done");
-      const stepThresholds = pendingSteps.map((_, i) => (i + 1) * 300);
-      let advancedCount = 0;
-
-      const stepMessages: Record<string, string> = {
-        create_file: "📄 Creating file...",
-        add_styles: "🎨 Styling...",
-        add_logic: "⚡ Adding logic...",
-        add_component: "🧩 Building component...",
-        configure: "⚙️ Configuring...",
-        verify: "✅ Verifying...",
-        edit: "✏️ Editing...",
-      };
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content && content.length > 0) {
-              fullText += content;
-              const displayText = stripFilesJson(fullText) || "Working...";
-
-              // Advance through steps based on content thresholds
-              if (advancedCount < stepThresholds.length - 1 && fullText.length > stepThresholds[advancedCount]) {
-                const pendingIdx = currentTask.steps.findIndex(
-                  (s, i) => s.status === "pending" || (s.status === "in_progress" && i > 0)
-                );
-                if (pendingIdx > 0) {
-                  // Complete current in-progress step
-                  const inProgressIdx = currentTask.steps.findIndex(s => s.status === "in_progress");
-                  if (inProgressIdx >= 0) {
-                    currentTask.steps[inProgressIdx].status = "done";
-                    currentTask.steps[inProgressIdx].duration = Date.now() - startTime;
-                  }
-                  // Find next pending step
-                  const nextPending = currentTask.steps.findIndex(s => s.status === "pending");
-                  if (nextPending >= 0) {
-                    currentTask = advanceTaskStep(currentTask, nextPending);
-                    const stepType = currentTask.steps[nextPending].type || "edit";
-                    setLoadingMessage(stepMessages[stepType] || "✏️ Agent working...");
-                  }
-                  updateLastAssistantTask(activeProject.id, currentTask);
-                }
-                advancedCount++;
-              }
-
-              updateLastAssistantMessage(activeProject.id, displayText);
-            }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
-        }
-      }
-
-      // Final buffer flush
-      if (textBuffer.trim()) {
-        for (let raw of textBuffer.split("\n")) {
-          if (!raw) continue;
-          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-          if (raw.startsWith(":") || raw.trim() === "") continue;
-          if (!raw.startsWith("data: ")) continue;
-          const jsonStr = raw.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content && content.length > 0) fullText += content;
-          } catch { /* ignore */ }
-        }
-      }
-
-      // Extract files and apply via sandbox
-      const files = extractFiles(fullText);
-      const fileNames = files ? files.map(f => f.path) : [];
+      const completedFiles: string[] = [];
       let fileDiffs: FileDiff[] = [];
 
-      if (files && files.length > 0) {
-        // Create sandbox from current files, compute diff, then commit
-        const oldFiles = activeProject.files;
-        const sandbox = createSandbox(oldFiles);
-        const newFiles = commitSandbox({ ...sandbox, working: files });
+      const oldFiles = [...activeProject.files];
 
-        // Compute diff between old and new
-        fileDiffs = diffFiles(
-          oldFiles.map(f => ({ path: f.path, content: f.content })),
-          newFiles.map(f => ({ path: f.path, content: f.content }))
-        );
-
-        // Apply to project
-        setFiles(activeProject.id, newFiles, prompt.trim());
-
-        // Update steps with actual file names
-        const editableSteps = currentTask.steps.filter(s => 
-          s.type && ["create_file", "edit", "add_styles", "add_logic", "add_component"].includes(s.type)
-        );
-        files.forEach((f, i) => {
-          if (i < editableSteps.length) {
-            const idx = currentTask.steps.findIndex(s => s.id === editableSteps[i].id);
-            if (idx >= 0) {
-              currentTask.steps[idx].label = `${f.name}`;
-              currentTask.steps[idx].detail = f.path;
+      const resultFiles = await executePerFile(
+        prompt.trim(),
+        perFilePlan,
+        activeProject.files,
+        {
+          onFileStart: (path, action) => {
+            const stepIdx = fileStepMap.get(path);
+            if (stepIdx !== undefined) {
+              // Complete previous in-progress step
+              const inProgressIdx = currentTask.steps.findIndex(s => s.status === "in_progress");
+              if (inProgressIdx >= 0 && inProgressIdx !== stepIdx) {
+                currentTask.steps[inProgressIdx].status = "done";
+                currentTask.steps[inProgressIdx].duration = Date.now() - startTime;
+              }
+              currentTask = advanceTaskStep(currentTask, stepIdx);
+              updateLastAssistantTask(activeProject.id, currentTask);
             }
-          }
-        });
+            const icon = action === "create" ? "📄" : "✏️";
+            const fileName = path.split("/").pop() || path;
+            setLoadingMessage(`${icon} ${action === "create" ? "Creating" : "Editing"} ${fileName}...`);
+            updateLastAssistantMessage(activeProject.id, `${icon} Working on \`${path}\`...`);
+          },
+          onFileStream: (path, partialContent) => {
+            const lines = partialContent.split("\n").length;
+            const fileName = path.split("/").pop() || path;
+            setLoadingMessage(`✏️ Writing ${fileName} (${lines} lines)...`);
+          },
+          onFileDone: (path, file) => {
+            completedFiles.push(path);
+            const stepIdx = fileStepMap.get(path);
+            if (stepIdx !== undefined) {
+              currentTask.steps[stepIdx].status = "done";
+              currentTask.steps[stepIdx].duration = Date.now() - startTime;
+              currentTask.steps[stepIdx].label = file.name;
+              currentTask.steps[stepIdx].detail = file.path;
+              updateLastAssistantTask(activeProject.id, currentTask);
+            }
 
-        if (files.length > editableSteps.length) {
-          for (let i = editableSteps.length; i < files.length; i++) {
-            currentTask.steps.push({
-              id: `extra-${i}`,
-              label: `${files[i].name}`,
-              status: "done",
-              type: "create_file",
-              detail: files[i].path,
-            });
-          }
-        }
-      }
+            // Apply file immediately to project
+            const currentProjectFiles = activeProject.files;
+            const existingIdx = currentProjectFiles.findIndex(f => f.path === file.path);
+            let newFiles: GeneratedFile[];
+            if (existingIdx >= 0) {
+              newFiles = currentProjectFiles.map((f, i) => i === existingIdx ? file : f);
+            } else {
+              newFiles = [...currentProjectFiles, file];
+            }
+            setFiles(activeProject.id, newFiles, `${prompt.trim()} [file: ${file.path}]`);
+
+            updateLastAssistantMessage(
+              activeProject.id,
+              `✅ ${file.name} applied (${completedFiles.length}/${perFilePlan.fileTasks.length} files)`
+            );
+          },
+          onError: (path, error) => {
+            const stepIdx = fileStepMap.get(path);
+            if (stepIdx !== undefined) {
+              currentTask.steps[stepIdx].status = "done";
+              currentTask.steps[stepIdx].label = `⚠️ ${path.split("/").pop()}`;
+            }
+            updateLastAssistantTask(activeProject.id, currentTask);
+          },
+          signal: controller.signal,
+        },
+        getStoredApiKey() || undefined,
+      );
+
+      // Compute final diff
+      fileDiffs = diffFiles(
+        oldFiles.map(f => ({ path: f.path, content: f.content })),
+        resultFiles.map(f => ({ path: f.path, content: f.content }))
+      );
 
       const totalTime = Date.now() - startTime;
-      currentTask = completeAllSteps(currentTask, fileNames);
+      currentTask = completeAllSteps(currentTask, completedFiles);
       currentTask.thinkingTime = totalTime;
-      // Attach diffs to task for display
       if (fileDiffs.length > 0) {
         (currentTask as any).diffs = fileDiffs;
         (currentTask as any).diffSummary = diffSummary(fileDiffs);
       }
       updateLastAssistantTask(activeProject.id, currentTask);
 
-      // Final display
-      const cleanText = stripFilesJson(fullText).trim();
-      let finalDisplay = cleanText;
-      if (files && files.length > 0) {
-        const fileList = files.map((f) => `\`${f.path}\``).join(", ");
-        const diffInfo = fileDiffs.length > 0 ? `\n\n📊 **Changes:** ${diffSummary(fileDiffs)}` : "";
-        finalDisplay = `${cleanText || "Done!"}\n\n📁 **Generated files:** ${fileList}${diffInfo}`;
-      }
-
-      const finalContent = finalDisplay || fullText || "Done!";
+      // Final message
+      const fileList = completedFiles.map(f => `\`${f}\``).join(", ");
+      const diffInfo = fileDiffs.length > 0 ? `\n\n📊 **Changes:** ${diffSummary(fileDiffs)}` : "";
+      const finalContent = `Done! Applied ${completedFiles.length} files: ${fileList}${diffInfo}`;
       updateLastAssistantMessage(activeProject.id, finalContent);
       persistAssistantMessage(activeProject.id, assistantMsgId, finalContent);
     } catch (err) {
