@@ -505,6 +505,7 @@ export function ChatPanel() {
             updateLastAssistantTask(activeProject.id, currentTask);
           },
           signal: controller.signal,
+          skippedFiles,
         },
         getStoredApiKey() || undefined,
       );
