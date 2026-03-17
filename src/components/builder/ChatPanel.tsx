@@ -423,6 +423,7 @@ export function ChatPanel() {
 
       const completedFiles: string[] = [];
       let fileDiffs: FileDiff[] = [];
+      const accumulatedFiles = new Map<string, GeneratedFile>();
 
       const oldFiles = [...activeProject.files];
 
