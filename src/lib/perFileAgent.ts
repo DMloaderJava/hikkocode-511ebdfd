@@ -241,6 +241,12 @@ export async function executePerFile(
   let workingFiles = [...currentFiles.map(f => ({ ...f }))];
 
   for (const task of perFilePlan.fileTasks) {
+    // Check if this file was skipped by the user
+    if (callbacks.skippedFiles?.has(task.path)) {
+      callbacks.onError(task.path, "Skipped by user");
+      continue;
+    }
+
     callbacks.onFileStart(task.path, task.action);
 
     try {
