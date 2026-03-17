@@ -465,16 +465,17 @@ export function ChatPanel() {
               updateLastAssistantTask(activeProject.id, currentTask);
             }
 
-            // Apply file immediately to project
-            const currentProjectFiles = activeProject.files;
-            const existingIdx = currentProjectFiles.findIndex(f => f.path === file.path);
-            let newFiles: GeneratedFile[];
-            if (existingIdx >= 0) {
-              newFiles = currentProjectFiles.map((f, i) => i === existingIdx ? file : f);
-            } else {
-              newFiles = [...currentProjectFiles, file];
+            // Accumulate files to avoid stale closure issue
+            accumulatedFiles.set(file.path, file);
+
+            // Build merged file list from old files + all accumulated so far
+            const mergedFiles = oldFiles.map(f => accumulatedFiles.get(f.path) || f);
+            for (const [path, af] of accumulatedFiles) {
+              if (!oldFiles.some(f => f.path === path)) {
+                mergedFiles.push(af);
+              }
             }
-            setFiles(activeProject.id, newFiles, `${prompt.trim()} [file: ${file.path}]`);
+            setFiles(activeProject.id, mergedFiles, `${prompt.trim()} [file: ${file.path}]`);
 
             updateLastAssistantMessage(
               activeProject.id,
