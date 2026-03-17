@@ -26,6 +26,7 @@ import {
   GitCompare,
   Plus,
   Minus,
+  SkipForward,
 } from "lucide-react";
 import type { FileDiff, DiffLine } from "@/lib/diff";
 
