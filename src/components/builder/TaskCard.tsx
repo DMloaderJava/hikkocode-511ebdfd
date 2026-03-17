@@ -104,6 +104,8 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   timestamp,
   filesChanged,
   thinkingTime,
+  fileProgress,
+  onSkipFile,
   plan,
   diffs,
   diffSummaryText,
