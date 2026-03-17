@@ -435,9 +435,9 @@ export function ChatPanel() {
         activeProject.files,
         {
           onFileStart: (path, action) => {
-            const stepIdx = fileStepMap.get(path);
+            const normalizedPath = normPath(path);
+            const stepIdx = fileStepMap.get(normalizedPath);
             if (stepIdx !== undefined) {
-              // Complete previous in-progress step
               const inProgressIdx = currentTask.steps.findIndex(s => s.status === "in_progress");
               if (inProgressIdx >= 0 && inProgressIdx !== stepIdx) {
                 currentTask.steps[inProgressIdx].status = "done";
@@ -446,19 +446,26 @@ export function ChatPanel() {
               currentTask = advanceTaskStep(currentTask, stepIdx);
               updateLastAssistantTask(activeProject.id, currentTask);
             }
+            const total = perFilePlan.fileTasks.length;
+            const done = completedFiles.length;
+            const pct = Math.round(((done) / total) * 100);
             const icon = action === "create" ? "📄" : "✏️";
             const fileName = path.split("/").pop() || path;
-            setLoadingMessage(`${icon} ${action === "create" ? "Creating" : "Editing"} ${fileName}...`);
-            updateLastAssistantMessage(activeProject.id, `${icon} Working on \`${path}\`...`);
+            setLoadingMessage(`${icon} ${action === "create" ? "Creating" : "Editing"} ${fileName}... (${done}/${total} — ${pct}%)`);
+            updateLastAssistantMessage(activeProject.id, `${icon} Working on \`${path}\`... [${done}/${total}]`);
           },
           onFileStream: (path, partialContent) => {
             const lines = partialContent.split("\n").length;
             const fileName = path.split("/").pop() || path;
-            setLoadingMessage(`✏️ Writing ${fileName} (${lines} lines)...`);
+            const total = perFilePlan.fileTasks.length;
+            const done = completedFiles.length;
+            const pct = Math.round(((done + 0.5) / total) * 100);
+            setLoadingMessage(`✏️ Writing ${fileName} (${lines} lines) — ${pct}%`);
           },
           onFileDone: (path, file) => {
             completedFiles.push(path);
-            const stepIdx = fileStepMap.get(path);
+            const normalizedPath = normPath(path);
+            const stepIdx = fileStepMap.get(normalizedPath);
             if (stepIdx !== undefined) {
               currentTask.steps[stepIdx].status = "done";
               currentTask.steps[stepIdx].duration = Date.now() - startTime;
@@ -472,16 +479,19 @@ export function ChatPanel() {
 
             // Build merged file list from old files + all accumulated so far
             const mergedFiles = oldFiles.map(f => accumulatedFiles.get(f.path) || f);
-            for (const [path, af] of accumulatedFiles) {
-              if (!oldFiles.some(f => f.path === path)) {
+            for (const [accPath, af] of accumulatedFiles) {
+              if (!oldFiles.some(f => f.path === accPath)) {
                 mergedFiles.push(af);
               }
             }
             setFiles(activeProject.id, mergedFiles, `${prompt.trim()} [file: ${file.path}]`);
 
+            const total = perFilePlan.fileTasks.length;
+            const done = completedFiles.length;
+            const pct = Math.round((done / total) * 100);
             updateLastAssistantMessage(
               activeProject.id,
-              `✅ ${file.name} applied (${completedFiles.length}/${perFilePlan.fileTasks.length} files)`
+              `✅ ${file.name} applied (${done}/${total} — ${pct}%)`
             );
           },
           onError: (path, error) => {
