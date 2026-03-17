@@ -400,6 +400,19 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                         </p>
                       )}
                     </div>
+                    {/* Skip button for pending file steps */}
+                    {step.status === "pending" && (step.type === "edit" || step.type === "create_file") && onSkipFile && step.detail && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSkipFile(step.detail!);
+                        }}
+                        className="flex-shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        title={`Skip ${step.detail}`}
+                      >
+                        <SkipForward className="w-3 h-3" />
+                      </button>
+                    )}
                   </motion.div>
                 );
               })}
