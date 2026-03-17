@@ -147,6 +147,7 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const skippedFilesRef = useRef<Set<string>>(new Set());
   const location = useLocation();
   const initialPromptHandled = useRef(false);
   const clarification = useClarification();
