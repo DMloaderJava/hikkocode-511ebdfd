@@ -45,6 +45,8 @@ interface TaskCardProps {
   timestamp?: string;
   filesChanged?: string[];
   thinkingTime?: number;
+  fileProgress?: { done: number; total: number };
+  onSkipFile?: (path: string) => void;
   plan?: {
     analysis: string;
     approach: string;
