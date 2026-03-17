@@ -26,6 +26,7 @@ import {
   GitCompare,
   Plus,
   Minus,
+  SkipForward,
 } from "lucide-react";
 import type { FileDiff, DiffLine } from "@/lib/diff";
 
@@ -45,6 +46,8 @@ interface TaskCardProps {
   timestamp?: string;
   filesChanged?: string[];
   thinkingTime?: number;
+  fileProgress?: { done: number; total: number };
+  onSkipFile?: (path: string) => void;
   plan?: {
     analysis: string;
     approach: string;
@@ -102,6 +105,8 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   timestamp,
   filesChanged,
   thinkingTime,
+  fileProgress,
+  onSkipFile,
   plan,
   diffs,
   diffSummaryText,
@@ -137,8 +142,25 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
       animate={{ opacity: 1, y: 0 }}
       className="bg-card border border-border rounded-xl overflow-hidden shadow-sm"
     >
-      {/* Progress bar */}
-      {isWorking && (
+      {/* File progress bar */}
+      {isWorking && fileProgress && fileProgress.total > 0 && (
+        <div className="px-4 pt-2 pb-1">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+            <span>Generating files</span>
+            <span className="font-mono">{fileProgress.done}/{fileProgress.total} — {Math.round((fileProgress.done / fileProgress.total) * 100)}%</span>
+          </div>
+          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-gradient-to-r from-violet-500 via-blue-500 to-emerald-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${(fileProgress.done / fileProgress.total) * 100}%` }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            />
+          </div>
+        </div>
+      )}
+      {/* Step progress bar (fallback when no fileProgress) */}
+      {isWorking && (!fileProgress || fileProgress.total === 0) && (
         <div className="h-0.5 bg-secondary">
           <motion.div
             className="h-full bg-gradient-to-r from-violet-500 via-blue-500 to-emerald-500"
@@ -378,6 +400,19 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                         </p>
                       )}
                     </div>
+                    {/* Skip button for pending file steps */}
+                    {step.status === "pending" && (step.type === "edit" || step.type === "create_file") && onSkipFile && step.detail && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSkipFile(step.detail!);
+                        }}
+                        className="flex-shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        title={`Skip ${step.detail}`}
+                      >
+                        <SkipForward className="w-3 h-3" />
+                      </button>
+                    )}
                   </motion.div>
                 );
               })}

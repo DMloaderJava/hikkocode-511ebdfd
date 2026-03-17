@@ -147,6 +147,7 @@ export function ChatPanel() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const skippedFilesRef = useRef<Set<string>>(new Set());
   const location = useLocation();
   const initialPromptHandled = useRef(false);
   const clarification = useClarification();
@@ -426,6 +427,8 @@ export function ChatPanel() {
       const completedFiles: string[] = [];
       let fileDiffs: FileDiff[] = [];
       const accumulatedFiles = new Map<string, GeneratedFile>();
+      const skippedFiles = skippedFilesRef.current = new Set<string>();
+      let fileProgressState = { done: 0, total: perFilePlan.fileTasks.length };
 
       const oldFiles = [...activeProject.files];
 
@@ -489,6 +492,8 @@ export function ChatPanel() {
             const total = perFilePlan.fileTasks.length;
             const done = completedFiles.length;
             const pct = Math.round((done / total) * 100);
+            fileProgressState = { done, total };
+            (currentTask as any).fileProgress = { ...fileProgressState };
             updateLastAssistantMessage(
               activeProject.id,
               `✅ ${file.name} applied (${done}/${total} — ${pct}%)`
@@ -503,6 +508,7 @@ export function ChatPanel() {
             updateLastAssistantTask(activeProject.id, currentTask);
           },
           signal: controller.signal,
+          skippedFiles,
         },
         getStoredApiKey() || undefined,
       );
@@ -592,6 +598,10 @@ export function ChatPanel() {
                           toolCount={msg.task.toolCount}
                           filesChanged={msg.task.filesChanged}
                           thinkingTime={msg.task.thinkingTime}
+                          fileProgress={(msg.task as any).fileProgress}
+                          onSkipFile={isGenerating ? (path) => {
+                            skippedFilesRef.current?.add(path);
+                          } : undefined}
                           plan={(msg.task as any).plan}
                           diffs={(msg.task as any).diffs}
                           diffSummaryText={(msg.task as any).diffSummary}
