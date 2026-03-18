@@ -264,6 +264,92 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Deploy to GitHub Pages: push files to gh-pages branch and enable Pages
+      case "deploy_pages": {
+        const { owner, repo, files, message } = params;
+        if (!owner || !repo || !files?.length) throw new Error("owner, repo, and files are required");
+
+        const branch = "gh-pages";
+
+        // Try to get gh-pages branch; if not exists, create orphan
+        const ghPagesRef = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/git/ref/heads/${branch}`, { headers: ghHeaders });
+
+        if (ghPagesRef.ok) {
+          // Branch exists — push on top
+          await pushFilesToBranch(ghHeaders, owner, repo, branch, files, message || "Deploy to GitHub Pages");
+        } else {
+          // Create orphan branch: create tree → commit (no parents) → create ref
+          const treeItems = [];
+          for (const file of files) {
+            const blobResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/git/blobs`, {
+              method: "POST",
+              headers: ghHeaders,
+              body: JSON.stringify({ content: file.content, encoding: "utf-8" }),
+            });
+            const blobData = await blobResp.json();
+            if (!blobResp.ok) throw new Error(`Failed to create blob [${blobResp.status}]`);
+            treeItems.push({ path: file.path, mode: "100644", type: "blob", sha: blobData.sha });
+          }
+
+          const treeResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/git/trees`, {
+            method: "POST",
+            headers: ghHeaders,
+            body: JSON.stringify({ tree: treeItems }),
+          });
+          const treeData = await treeResp.json();
+          if (!treeResp.ok) throw new Error(`Failed to create tree [${treeResp.status}]`);
+
+          const commitResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/git/commits`, {
+            method: "POST",
+            headers: ghHeaders,
+            body: JSON.stringify({ message: message || "Initial GitHub Pages deploy", tree: treeData.sha, parents: [] }),
+          });
+          const commitData = await commitResp.json();
+          if (!commitResp.ok) throw new Error(`Failed to create commit [${commitResp.status}]`);
+
+          const createRefResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/git/refs`, {
+            method: "POST",
+            headers: ghHeaders,
+            body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commitData.sha }),
+          });
+          if (!createRefResp.ok) {
+            const err = await createRefResp.json();
+            throw new Error(`Failed to create gh-pages branch [${createRefResp.status}]: ${JSON.stringify(err)}`);
+          }
+        }
+
+        // Enable GitHub Pages on gh-pages branch
+        const pagesResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/pages`, {
+          method: "POST",
+          headers: ghHeaders,
+          body: JSON.stringify({ source: { branch: "gh-pages", path: "/" } }),
+        });
+        // 409 means already enabled — that's fine
+        if (!pagesResp.ok && pagesResp.status !== 409) {
+          // Try PUT for updating existing config
+          const putResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/pages`, {
+            method: "PUT",
+            headers: ghHeaders,
+            body: JSON.stringify({ source: { branch: "gh-pages", path: "/" } }),
+          });
+          if (!putResp.ok && putResp.status !== 204) {
+            console.warn("Could not configure Pages, may need manual setup");
+          }
+        }
+
+        // Get the pages URL
+        let pagesUrl = `https://${owner}.github.io/${repo}`;
+        try {
+          const infoResp = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/pages`, { headers: ghHeaders });
+          if (infoResp.ok) {
+            const infoData = await infoResp.json();
+            if (infoData.html_url) pagesUrl = infoData.html_url;
+          }
+        } catch { /* use default */ }
+
+        return json({ success: true, url: pagesUrl, branch });
+      }
+
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }
