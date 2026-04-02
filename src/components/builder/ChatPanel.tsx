@@ -598,13 +598,13 @@ export function ChatPanel() {
                           toolCount={msg.task.toolCount}
                           filesChanged={msg.task.filesChanged}
                           thinkingTime={msg.task.thinkingTime}
-                          fileProgress={(msg.task as any).fileProgress}
+                          fileProgress={msg.task.fileProgress}
                           onSkipFile={isGenerating ? (path) => {
                             skippedFilesRef.current?.add(path);
                           } : undefined}
-                          plan={(msg.task as any).plan}
-                          diffs={(msg.task as any).diffs}
-                          diffSummaryText={(msg.task as any).diffSummary}
+                          plan={msg.task.plan}
+                          diffs={msg.task.diffs}
+                          diffSummaryText={msg.task.diffSummary}
                           timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         />
                       )}
