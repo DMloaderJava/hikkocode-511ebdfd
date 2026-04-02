@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS file_index_project_path_unique ON public.file_index (project_id, file_path);

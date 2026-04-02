@@ -25,7 +25,19 @@ export interface GenerationTask {
   filesChanged: string[];
   toolCount: number;
   timestamp: Date;
-  thinkingTime?: number; // total ms for thinking phase
+  thinkingTime?: number;
+  fileProgress?: { done: number; total: number };
+  plan?: {
+    analysis: string;
+    approach: string;
+    technologies?: string[];
+    files_to_read?: string[];
+    files_to_edit?: string[];
+    new_files?: string[];
+    planSteps?: string[];
+  };
+  diffs?: import("@/lib/diff").FileDiff[];
+  diffSummary?: string;
 }
 
 export interface ChatMessage {
@@ -383,37 +395,68 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }, 500);
 
-    setState(prev => {
-      const updateProject = (p: Project): Project => {
-        const newVersion = p.version + 1;
-        const user = userRef.current;
-        if (user) {
+    // Update version in DB (outside setState)
+    const user = userRef.current;
+    if (user) {
+      // We'll compute newVersion below and update DB here
+      setState(prev => {
+        const project = prev.projects.find(p => p.id === projectId) || prev.activeProject;
+        const currentVersion = project?.version ?? 0;
+        const newVersion = currentVersion + 1;
+
+        // Fire DB update outside of render cycle
+        queueMicrotask(() => {
           supabase
             .from("projects")
             .update({ version: newVersion, updated_at: new Date().toISOString() })
             .eq("id", projectId)
             .then();
-        }
+        });
 
-        const snapshot: VersionSnapshot = {
-          id: crypto.randomUUID(),
-          version: p.version,
-          files: p.files,
-          prompt: prompt || "Unknown change",
-          timestamp: new Date(),
+        const updateProject = (p: Project): Project => {
+          const snapshot: VersionSnapshot = {
+            id: crypto.randomUUID(),
+            version: p.version,
+            files: p.files,
+            prompt: prompt || "Unknown change",
+            timestamp: new Date(),
+          };
+          const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
+          return { ...p, files, version: newVersion, history: newHistory };
         };
-        const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
-        return { ...p, files, version: newVersion, history: newHistory };
-      };
 
-      const projects = prev.projects.map(p =>
-        p.id === projectId ? updateProject(p) : p
-      );
-      const activeProject = prev.activeProject?.id === projectId
-        ? updateProject(prev.activeProject)
-        : prev.activeProject;
-      return { ...prev, projects, activeProject };
-    });
+        const projects = prev.projects.map(p =>
+          p.id === projectId ? updateProject(p) : p
+        );
+        const activeProject = prev.activeProject?.id === projectId
+          ? updateProject(prev.activeProject)
+          : prev.activeProject;
+        return { ...prev, projects, activeProject };
+      });
+    } else {
+      setState(prev => {
+        const updateProject = (p: Project): Project => {
+          const newVersion = p.version + 1;
+          const snapshot: VersionSnapshot = {
+            id: crypto.randomUUID(),
+            version: p.version,
+            files: p.files,
+            prompt: prompt || "Unknown change",
+            timestamp: new Date(),
+          };
+          const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
+          return { ...p, files, version: newVersion, history: newHistory };
+        };
+
+        const projects = prev.projects.map(p =>
+          p.id === projectId ? updateProject(p) : p
+        );
+        const activeProject = prev.activeProject?.id === projectId
+          ? updateProject(prev.activeProject)
+          : prev.activeProject;
+        return { ...prev, projects, activeProject };
+      });
+    }
   }, [flushFilesToDb]);
 
   const restoreVersion = useCallback((projectId: string, versionId: string) => {

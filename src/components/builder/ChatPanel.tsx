@@ -391,7 +391,7 @@ export function ChatPanel() {
             new_files: plan.new_files,
             planSteps: plan.plan,
           },
-        } as GenerationTask;
+        };
       } else {
         // Fallback steps
         const fbSteps = fallbackSteps(prompt, activeProject.files.length > 0);
@@ -493,7 +493,7 @@ export function ChatPanel() {
             const done = completedFiles.length;
             const pct = Math.round((done / total) * 100);
             fileProgressState = { done, total };
-            (currentTask as any).fileProgress = { ...fileProgressState };
+            currentTask.fileProgress = { ...fileProgressState };
             updateLastAssistantMessage(
               activeProject.id,
               `✅ ${file.name} applied (${done}/${total} — ${pct}%)`
@@ -523,8 +523,8 @@ export function ChatPanel() {
       currentTask = completeAllSteps(currentTask, completedFiles);
       currentTask.thinkingTime = totalTime;
       if (fileDiffs.length > 0) {
-        (currentTask as any).diffs = fileDiffs;
-        (currentTask as any).diffSummary = diffSummary(fileDiffs);
+        currentTask.diffs = fileDiffs;
+        currentTask.diffSummary = diffSummary(fileDiffs);
       }
       updateLastAssistantTask(activeProject.id, currentTask);
 
@@ -598,13 +598,13 @@ export function ChatPanel() {
                           toolCount={msg.task.toolCount}
                           filesChanged={msg.task.filesChanged}
                           thinkingTime={msg.task.thinkingTime}
-                          fileProgress={(msg.task as any).fileProgress}
+                          fileProgress={msg.task.fileProgress}
                           onSkipFile={isGenerating ? (path) => {
                             skippedFilesRef.current?.add(path);
                           } : undefined}
-                          plan={(msg.task as any).plan}
-                          diffs={(msg.task as any).diffs}
-                          diffSummaryText={(msg.task as any).diffSummary}
+                          plan={msg.task.plan}
+                          diffs={msg.task.diffs}
+                          diffSummaryText={msg.task.diffSummary}
                           timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         />
                       )}
