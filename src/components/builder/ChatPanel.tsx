@@ -391,7 +391,7 @@ export function ChatPanel() {
             new_files: plan.new_files,
             planSteps: plan.plan,
           },
-        } as GenerationTask;
+        };
       } else {
         // Fallback steps
         const fbSteps = fallbackSteps(prompt, activeProject.files.length > 0);
