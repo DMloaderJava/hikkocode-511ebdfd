@@ -1,3 +1,4 @@
+import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
@@ -5,12 +6,6 @@ import "./index.css";
 // Initialize theme from localStorage
 if (localStorage.getItem("theme") === "dark") {
   document.documentElement.classList.add("dark");
-}
-
-// Check if Supabase env vars are available (they may be missing in published builds)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-if (!supabaseUrl) {
-  console.warn("VITE_SUPABASE_URL is not set. The app may not function correctly.");
 }
 
 // Error boundary for uncaught errors
@@ -72,8 +67,6 @@ class ErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
-
-import React from "react";
 
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
