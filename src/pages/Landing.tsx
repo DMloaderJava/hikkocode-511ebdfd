@@ -14,53 +14,56 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-function ProjectCard({ project, onClick }: { project: any; onClick: () => void }) {
-  const timeAgo = (date: Date) => {
-    const diff = Date.now() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
+const ProjectCard = forwardRef<HTMLButtonElement, { project: any; onClick: () => void }>(
+  function ProjectCard({ project, onClick }, ref) {
+    const timeAgo = (date: Date) => {
+      const diff = Date.now() - date.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "Just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    };
 
-  return (
-    <motion.button
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      onClick={onClick}
-      className="group text-left rounded-xl border border-border bg-card overflow-hidden hover:shadow-lovable-md hover:border-foreground/10 transition-all duration-200"
-    >
-      {/* Preview area */}
-      <div className="aspect-[16/10] bg-secondary/40 flex items-center justify-center relative overflow-hidden">
-        <div className="text-center p-4">
-          <p className="text-xs text-muted-foreground/60 font-medium">
-            {project.files.length > 0 ? `${project.files.length} files · v${project.version}` : "Welcome to Your Blank App"}
-          </p>
+    return (
+      <motion.button
+        ref={ref}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        onClick={onClick}
+        className="group text-left rounded-xl border border-border bg-card overflow-hidden hover:shadow-lovable-md hover:border-foreground/10 transition-all duration-200"
+      >
+        {/* Preview area */}
+        <div className="aspect-[16/10] bg-secondary/40 flex items-center justify-center relative overflow-hidden">
+          <div className="text-center p-4">
+            <p className="text-xs text-muted-foreground/60 font-medium">
+              {project.files.length > 0 ? `${project.files.length} files · v${project.version}` : "Welcome to Your Blank App"}
+            </p>
+          </div>
+          {/* Hover overlay */}
+          <div className="absolute inset-0 bg-foreground/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <span className="px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium">
+              Open
+            </span>
+          </div>
         </div>
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-foreground/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="px-3 py-1.5 rounded-lg bg-foreground text-background text-xs font-medium">
-            Open
-          </span>
+        {/* Info */}
+        <div className="p-3 flex items-start gap-2.5">
+          <div className="w-7 h-7 rounded-lg gradient-lovable flex-shrink-0 mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Edited {timeAgo(project.createdAt)}
+            </p>
+          </div>
         </div>
-      </div>
-      {/* Info */}
-      <div className="p-3 flex items-start gap-2.5">
-        <div className="w-7 h-7 rounded-lg gradient-lovable flex-shrink-0 mt-0.5" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
-          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            Edited {timeAgo(project.createdAt)}
-          </p>
-        </div>
-      </div>
-    </motion.button>
-  );
-}
+      </motion.button>
+    );
+  }
+);
 
 export default function Landing() {
   const navigate = useNavigate();
