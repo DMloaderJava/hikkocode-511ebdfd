@@ -1,3 +1,4 @@
+import React, { forwardRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowUp, Plus, MessageCircle, Key, FolderOpen, Star, Clock, ArrowRight, Github, Download, Loader2, Check, FileCode, ExternalLink, GitBranch } from "lucide-react";
 import { useNavigate } from "react-router-dom";
