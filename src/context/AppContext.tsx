@@ -25,7 +25,19 @@ export interface GenerationTask {
   filesChanged: string[];
   toolCount: number;
   timestamp: Date;
-  thinkingTime?: number; // total ms for thinking phase
+  thinkingTime?: number;
+  fileProgress?: { done: number; total: number };
+  plan?: {
+    analysis: string;
+    approach: string;
+    technologies?: string[];
+    files_to_read?: string[];
+    files_to_edit?: string[];
+    new_files?: string[];
+    planSteps?: string[];
+  };
+  diffs?: import("@/lib/diff").FileDiff[];
+  diffSummary?: string;
 }
 
 export interface ChatMessage {
