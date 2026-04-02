@@ -493,7 +493,7 @@ export function ChatPanel() {
             const done = completedFiles.length;
             const pct = Math.round((done / total) * 100);
             fileProgressState = { done, total };
-            (currentTask as any).fileProgress = { ...fileProgressState };
+            currentTask.fileProgress = { ...fileProgressState };
             updateLastAssistantMessage(
               activeProject.id,
               `✅ ${file.name} applied (${done}/${total} — ${pct}%)`
