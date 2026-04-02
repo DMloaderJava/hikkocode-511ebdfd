@@ -523,8 +523,8 @@ export function ChatPanel() {
       currentTask = completeAllSteps(currentTask, completedFiles);
       currentTask.thinkingTime = totalTime;
       if (fileDiffs.length > 0) {
-        (currentTask as any).diffs = fileDiffs;
-        (currentTask as any).diffSummary = diffSummary(fileDiffs);
+        currentTask.diffs = fileDiffs;
+        currentTask.diffSummary = diffSummary(fileDiffs);
       }
       updateLastAssistantTask(activeProject.id, currentTask);
 
