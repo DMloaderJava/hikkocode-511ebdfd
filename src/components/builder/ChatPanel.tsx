@@ -15,6 +15,7 @@ import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/
 import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
 import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { buildFileTasks, executePerFile } from "@/lib/perFileAgent";
+import { runAgentLoop, type AgentStep as AgentToolStep } from "@/lib/agentToolLoop";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
@@ -226,7 +227,7 @@ export function ChatPanel() {
 
   const submitPrompt = async (initialPrompt: string) => {
     if (!initialPrompt.trim() || isGenerating || !activeProject) return;
-    let prompt = initialPrompt;
+    const prompt = initialPrompt;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -246,14 +247,12 @@ export function ChatPanel() {
     const startTime = Date.now();
     const assistantMsgId = crypto.randomUUID();
 
-    // Start with minimal task - will be replaced by plan
+    // Initialize task with thinking step
+    let currentSteps: TaskStep[] = [];
     let currentTask: GenerationTask = {
       id: crypto.randomUUID(),
       title: taskTitle,
-      steps: [
-        { id: "analyze", label: "Analyzing request", status: "in_progress", type: "think", detail: "Understanding what you need..." },
-        { id: "plan-loading", label: "Creating action plan", status: "pending", type: "plan" },
-      ],
+      steps: currentSteps,
       filesChanged: [],
       toolCount: 0,
       timestamp: new Date(),
@@ -267,271 +266,125 @@ export function ChatPanel() {
       task: currentTask,
     });
 
-    const abortableSleep = (ms: number) =>
-      new Promise<void>((resolve, reject) => {
-        if (controller.signal.aborted) {
-          reject(new DOMException("Aborted", "AbortError"));
-          return;
-        }
-        const timer = setTimeout(resolve, ms);
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(new DOMException("Aborted", "AbortError"));
-        };
-        controller.signal.addEventListener("abort", onAbort, { once: true });
-      });
+    const changedFiles: string[] = [];
+    const oldFiles = [...activeProject.files];
 
     try {
-      // === PHASE 1: AI PLANNING ===
-      setLoadingMessage("🧠 Agent is thinking...");
-      let plan: AgentPlan | null = null;
-
-      try {
-        const planResp = await fetch(PLAN_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            prompt: prompt.trim(),
-            existingFiles: activeProject.files.map(f => ({
-              path: f.path,
-              language: f.language,
-              content: f.content,
-            })),
-          }),
-          signal: controller.signal,
-        });
-
-        if (planResp.ok) {
-          plan = await planResp.json();
-        }
-      } catch (e) {
-        if (e instanceof DOMException && e.name === "AbortError") throw e;
-        console.warn("Plan failed, using fallback:", e);
-      }
-
-      // === PHASE 1.5: Check if clarification needed ===
-      if (plan) {
-        // Check if plan mentions alternatives user should choose from
-        const alternatives = (plan as any).alternatives as string[] | undefined;
-        if (alternatives && alternatives.length > 1) {
-          setLoadingMessage("🤔 Нужен ваш выбор...");
-          const result = await clarification.askUser({
-            title: "Выберите подход",
-            description: plan.analysis,
-            fields: [{
-              type: "choice",
-              id: "approach",
-              label: "Доступные варианты реализации:",
-              options: [
-                { value: "default", label: plan.approach, description: "Рекомендуемый подход" },
-                ...alternatives.map((alt, i) => ({ value: `alt-${i}`, label: alt, description: "Альтернативный подход" })),
-              ],
-            }],
-          });
-          if (result && result.approach !== "default") {
-            const chosenIdx = parseInt(result.approach.replace("alt-", ""));
-            if (!isNaN(chosenIdx) && alternatives[chosenIdx]) {
-              // Modify the prompt to include the chosen approach
-              prompt = `${prompt}\n\nИспользуй этот подход: ${alternatives[chosenIdx]}`;
-            }
-          }
-          if (!result) {
-            // User cancelled
-            updateLastAssistantMessage(activeProject.id, "⏹️ Отменено пользователем.");
-            currentTask = completeAllSteps(currentTask, []);
-            updateLastAssistantTask(activeProject.id, currentTask);
-            setIsGenerating(false);
-            setLoadingMessage("");
-            return;
-          }
-        }
-
-        // Check if API key is needed but not set
-        const techLower = (plan.technologies || []).map((t: string) => t.toLowerCase());
-        const needsExternalApi = techLower.some((t: string) => 
-          ["openai", "stripe", "firebase", "aws", "twilio", "sendgrid"].includes(t)
-        );
-        if (needsExternalApi && !getStoredApiKey()) {
-          setLoadingMessage("🔑 Требуется API ключ...");
-          const result = await clarification.askUser({
-            title: "Требуется API ключ",
-            description: `Для этого проекта может понадобиться API ключ (${techLower.filter((t: string) => ["openai", "stripe", "firebase"].includes(t)).join(", ")}).`,
-            fields: [
-              { type: "password", id: "apiKey", label: "API Key", placeholder: "sk-...", required: false },
-            ],
-          });
-          if (result?.apiKey) {
-            localStorage.setItem("hikko_gemini_api_key", result.apiKey);
-          }
-          // Continue regardless — key is optional
-        }
-      }
-
-      // === PHASE 2: Build task steps from plan ===
-      const planStepTime = Date.now() - startTime;
-
-      if (plan && plan.plan && plan.plan.length > 0) {
-        const agentSteps = planToSteps(plan);
-        agentSteps[0].duration = planStepTime;
-        if (agentSteps.length > 1) agentSteps[1].duration = planStepTime;
-
-        currentTask = {
-          ...currentTask,
-          title: taskTitle,
-          steps: agentSteps,
-          plan: {
-            analysis: plan.analysis,
-            approach: plan.approach,
-            technologies: plan.technologies,
-            files_to_read: plan.files_to_read,
-            files_to_edit: plan.files_to_edit,
-            new_files: plan.new_files,
-            planSteps: plan.plan,
-          },
-        };
-      } else {
-        // Fallback steps
-        const fbSteps = fallbackSteps(prompt, activeProject.files.length > 0);
-        fbSteps[0].status = "done";
-        fbSteps[0].duration = planStepTime;
-        currentTask = { ...currentTask, steps: fbSteps };
-      }
-
-      updateLastAssistantTask(activeProject.id, currentTask);
-      setLoadingMessage("📋 Plan ready, executing...");
-      await abortableSleep(300);
-
-      // === PHASE 3: EXECUTE — Per-file generation ===
-      setLoadingMessage("✏️ Agent is writing code...");
-
-      const perFilePlan = plan
-        ? buildFileTasks(plan)
-        : { approach: "Generate standard web app files", planSteps: ["Create project files"], fileTasks: [
-            { path: "/index.html", action: "create" as const },
-            { path: "/styles.css", action: "create" as const },
-            { path: "/app.js", action: "create" as const },
-          ]};
-
-      // Map plan file tasks to step IDs (normalize paths for matching)
-      const normPath = (p: string) => p.startsWith("/") ? p : `/${p}`;
-      const fileStepMap = new Map<string, number>();
-      currentTask.steps.forEach((step, idx) => {
-        if (step.detail && (step.type === "edit" || step.type === "create_file")) {
-          fileStepMap.set(normPath(step.detail), idx);
-        }
-      });
-
-      const completedFiles: string[] = [];
-      let fileDiffs: FileDiff[] = [];
-      const accumulatedFiles = new Map<string, GeneratedFile>();
-      const skippedFiles = skippedFilesRef.current = new Set<string>();
-      let fileProgressState = { done: 0, total: perFilePlan.fileTasks.length };
-
-      const oldFiles = [...activeProject.files];
-
-      const resultFiles = await executePerFile(
+      // Run the new agent loop with tool-calling
+      const resultFiles = await runAgentLoop(
         prompt.trim(),
-        perFilePlan,
         activeProject.files,
         {
-          onFileStart: (path, action) => {
-            const normalizedPath = normPath(path);
-            const stepIdx = fileStepMap.get(normalizedPath);
-            if (stepIdx !== undefined) {
-              const inProgressIdx = currentTask.steps.findIndex(s => s.status === "in_progress");
-              if (inProgressIdx >= 0 && inProgressIdx !== stepIdx) {
-                currentTask.steps[inProgressIdx].status = "done";
-                currentTask.steps[inProgressIdx].duration = Date.now() - startTime;
-              }
-              currentTask = advanceTaskStep(currentTask, stepIdx);
-              updateLastAssistantTask(activeProject.id, currentTask);
-            }
-            const total = perFilePlan.fileTasks.length;
-            const done = completedFiles.length;
-            const pct = Math.round(((done) / total) * 100);
-            const icon = action === "create" ? "📄" : "✏️";
-            const fileName = path.split("/").pop() || path;
-            setLoadingMessage(`${icon} ${action === "create" ? "Creating" : "Editing"} ${fileName}... (${done}/${total} — ${pct}%)`);
-            updateLastAssistantMessage(activeProject.id, `${icon} Working on \`${path}\`... [${done}/${total}]`);
+          onStep: (step: AgentToolStep) => {
+            // Map AgentToolStep to TaskStep
+            const typeMap: Record<string, TaskStep["type"]> = {
+              thinking: "think",
+              reading: "read",
+              understanding: "analyze",
+              editing: "edit",
+              creating: "create_file",
+              deleting: "edit",
+              listing: "read",
+              done: "verify",
+              error: "default",
+            };
+            const newStep: TaskStep = {
+              id: step.id,
+              label: step.label,
+              status: step.status,
+              type: typeMap[step.type] || "default",
+              detail: step.detail || step.filePath,
+              duration: step.duration,
+            };
+            currentSteps = [...currentSteps, newStep];
+            currentTask = { ...currentTask, steps: currentSteps };
+            updateLastAssistantTask(activeProject.id, currentTask);
+
+            // Update loading message
+            const iconMap: Record<string, string> = {
+              thinking: "🧠", reading: "📖", understanding: "💡",
+              editing: "✏️", creating: "📄", deleting: "🗑️", listing: "📁",
+            };
+            setLoadingMessage(`${iconMap[step.type] || "⚙️"} ${step.label}`);
           },
-          onFileStream: (path, partialContent) => {
-            const lines = partialContent.split("\n").length;
-            const fileName = path.split("/").pop() || path;
-            const total = perFilePlan.fileTasks.length;
-            const done = completedFiles.length;
-            const pct = Math.round(((done + 0.5) / total) * 100);
-            setLoadingMessage(`✏️ Writing ${fileName} (${lines} lines) — ${pct}%`);
-          },
-          onFileDone: (path, file) => {
-            completedFiles.push(path);
-            const normalizedPath = normPath(path);
-            const stepIdx = fileStepMap.get(normalizedPath);
-            if (stepIdx !== undefined) {
-              currentTask.steps[stepIdx].status = "done";
-              currentTask.steps[stepIdx].duration = Date.now() - startTime;
-              currentTask.steps[stepIdx].label = file.name;
-              currentTask.steps[stepIdx].detail = file.path;
-              updateLastAssistantTask(activeProject.id, currentTask);
-            }
-
-            // Accumulate files to avoid stale closure issue
-            accumulatedFiles.set(file.path, file);
-
-            // Build merged file list from old files + all accumulated so far
-            const mergedFiles = oldFiles.map(f => accumulatedFiles.get(f.path) || f);
-            for (const [accPath, af] of accumulatedFiles) {
-              if (!oldFiles.some(f => f.path === accPath)) {
-                mergedFiles.push(af);
-              }
-            }
-            setFiles(activeProject.id, mergedFiles, `${prompt.trim()} [file: ${file.path}]`);
-
-            const total = perFilePlan.fileTasks.length;
-            const done = completedFiles.length;
-            const pct = Math.round((done / total) * 100);
-            fileProgressState = { done, total };
-            currentTask.fileProgress = { ...fileProgressState };
-            updateLastAssistantMessage(
-              activeProject.id,
-              `✅ ${file.name} applied (${done}/${total} — ${pct}%)`
+          onStepUpdate: (stepId: string, update: Partial<AgentToolStep>) => {
+            currentSteps = currentSteps.map(s =>
+              s.id === stepId ? { ...s, ...update, status: update.status || s.status } as TaskStep : s
             );
-          },
-          onError: (path, error) => {
-            const stepIdx = fileStepMap.get(path);
-            if (stepIdx !== undefined) {
-              currentTask.steps[stepIdx].status = "done";
-              currentTask.steps[stepIdx].label = `⚠️ ${path.split("/").pop()}`;
-            }
+            currentTask = { ...currentTask, steps: currentSteps };
             updateLastAssistantTask(activeProject.id, currentTask);
           },
+          onThinkingStream: (text: string) => {
+            // Show streaming thinking in message content
+            updateLastAssistantMessage(activeProject.id, text);
+          },
+          onFileChanged: (path: string, file: GeneratedFile) => {
+            if (!changedFiles.includes(path)) changedFiles.push(path);
+            currentTask = {
+              ...currentTask,
+              filesChanged: [...changedFiles],
+              toolCount: changedFiles.length,
+            };
+            updateLastAssistantTask(activeProject.id, currentTask);
+
+            // Apply file immediately
+            const currentFiles = activeProject.files;
+            const existingIdx = currentFiles.findIndex(f => f.path === path);
+            let newFiles: GeneratedFile[];
+            if (existingIdx >= 0) {
+              newFiles = currentFiles.map((f, i) => i === existingIdx ? file : f);
+            } else {
+              newFiles = [...currentFiles, file];
+            }
+            setFiles(activeProject.id, newFiles, `${prompt.trim()} [${path}]`);
+          },
+          onFileDeleted: (path: string) => {
+            if (!changedFiles.includes(path)) changedFiles.push(path);
+            const currentFiles = activeProject.files.filter(f => f.path !== path);
+            setFiles(activeProject.id, currentFiles, `${prompt.trim()} [deleted ${path}]`);
+          },
+          onComplete: (summary: string) => {
+            // Add final verify step
+            const verifyStep: TaskStep = {
+              id: `verify-${Date.now()}`,
+              label: "Agent finished",
+              status: "done",
+              type: "verify",
+            };
+            currentSteps = [...currentSteps, verifyStep];
+          },
+          onError: (error: string) => {
+            toast.error(error);
+          },
           signal: controller.signal,
-          skippedFiles,
         },
         getStoredApiKey() || undefined,
       );
 
       // Compute final diff
-      fileDiffs = diffFiles(
+      const fileDiffs = diffFiles(
         oldFiles.map(f => ({ path: f.path, content: f.content })),
-        resultFiles.map(f => ({ path: f.path, content: f.content }))
+        resultFiles.map(f => ({ path: f.path, content: f.content })),
       );
 
       const totalTime = Date.now() - startTime;
-      currentTask = completeAllSteps(currentTask, completedFiles);
-      currentTask.thinkingTime = totalTime;
-      if (fileDiffs.length > 0) {
-        currentTask.diffs = fileDiffs;
-        currentTask.diffSummary = diffSummary(fileDiffs);
-      }
+      currentTask = {
+        ...currentTask,
+        steps: currentSteps.map(s => ({ ...s, status: "done" as const })),
+        filesChanged: changedFiles,
+        toolCount: changedFiles.length,
+        thinkingTime: totalTime,
+        diffs: fileDiffs.length > 0 ? fileDiffs : undefined,
+        diffSummary: fileDiffs.length > 0 ? diffSummary(fileDiffs) : undefined,
+      };
       updateLastAssistantTask(activeProject.id, currentTask);
 
       // Final message
-      const fileList = completedFiles.map(f => `\`${f}\``).join(", ");
+      const fileList = changedFiles.map(f => `\`${f}\``).join(", ");
       const diffInfo = fileDiffs.length > 0 ? `\n\n📊 **Changes:** ${diffSummary(fileDiffs)}` : "";
-      const finalContent = `Done! Applied ${completedFiles.length} files: ${fileList}${diffInfo}`;
+      const finalContent = changedFiles.length > 0
+        ? `✨ Done! Applied ${changedFiles.length} files: ${fileList}${diffInfo}`
+        : "✅ Analysis complete.";
       updateLastAssistantMessage(activeProject.id, finalContent);
       persistAssistantMessage(activeProject.id, assistantMsgId, finalContent);
     } catch (err) {
@@ -545,7 +398,10 @@ export function ChatPanel() {
         updateLastAssistantMessage(activeProject.id, errMsg);
         persistAssistantMessage(activeProject.id, assistantMsgId, errMsg);
       }
-      currentTask = completeAllSteps(currentTask, []);
+      currentTask = {
+        ...currentTask,
+        steps: currentSteps.map(s => ({ ...s, status: "done" as const })),
+      };
       updateLastAssistantTask(activeProject.id, currentTask);
     } finally {
       abortControllerRef.current = null;
