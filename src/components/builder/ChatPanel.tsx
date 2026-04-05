@@ -15,6 +15,7 @@ import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/
 import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
 import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { buildFileTasks, executePerFile } from "@/lib/perFileAgent";
+import { runAgentLoop, type AgentStep as AgentToolStep } from "@/lib/agentToolLoop";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
