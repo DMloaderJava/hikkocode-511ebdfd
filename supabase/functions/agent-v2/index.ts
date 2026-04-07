@@ -11,7 +11,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "list_files",
-      description: "List all files in the project with their paths, languages, and sizes. Use this first to understand the project structure.",
+      description: "List all files in the project with their paths, languages, and sizes.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -19,11 +19,11 @@ const TOOLS = [
     type: "function",
     function: {
       name: "read_file",
-      description: "Read the full content of a specific file. Use this to understand existing code before making changes.",
+      description: "Read the full content of a specific file.",
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "File path to read, e.g. '/index.html'" },
+          path: { type: "string", description: "File path to read" },
         },
         required: ["path"],
       },
@@ -33,13 +33,13 @@ const TOOLS = [
     type: "function",
     function: {
       name: "edit_file",
-      description: "Replace the entire content of an existing file. Always read the file first before editing.",
+      description: "Replace the entire content of an existing file. Always read the file first.",
       parameters: {
         type: "object",
         properties: {
           path: { type: "string", description: "File path to edit" },
           content: { type: "string", description: "Complete new file content" },
-          description: { type: "string", description: "Brief description of changes made" },
+          description: { type: "string", description: "Brief description of changes" },
         },
         required: ["path", "content"],
       },
@@ -53,9 +53,9 @@ const TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          path: { type: "string", description: "File path for the new file, e.g. '/components/Button.js'" },
+          path: { type: "string", description: "File path for the new file" },
           content: { type: "string", description: "Complete file content" },
-          language: { type: "string", description: "Programming language: html, css, javascript, typescript, json, etc." },
+          language: { type: "string", description: "Programming language" },
         },
         required: ["path", "content"],
       },
@@ -81,46 +81,44 @@ const SYSTEM_PROMPT = `You are hikkocode AI — an expert full-stack web develop
 
 ## HOW YOU WORK
 
-You have access to tools to interact with the project files. Follow this workflow:
+You have tools to interact with project files. Follow this workflow:
 
-### 1. UNDERSTAND (Thinking)
-First, think about what the user wants. Explain your understanding briefly.
+### 1. THINK — Briefly explain your understanding of the request.
 
-### 2. EXPLORE (Read)
-Use \`list_files\` to see the project structure.
-Use \`read_file\` to read relevant files you need to understand.
-Read files that are likely affected by the changes.
+### 2. EXPLORE — Use list_files and read_file to understand the project.
 
-### 3. PLAN (Understanding)
-After reading, summarize what you found and explain your plan:
-- What issues exist (if fixing bugs)
-- What files need changes
-- Your approach
+### 3. PLAN — Summarize what needs to change and why.
 
-### 4. IMPLEMENT (Edit/Create)
-Use \`edit_file\` to modify existing files.
-Use \`create_file\` to add new files.
-Use \`delete_file\` to remove files.
+### 4. IMPLEMENT — Use create_file / edit_file / delete_file.
 
-## RULES
+## CRITICAL RULES
+
+- **ALWAYS call multiple tools in parallel when possible!**
+  For example, if creating a todo app, call create_file for ALL files (index.html, style.css, app.js) in ONE response, not one at a time.
+  If reading multiple files, call read_file for ALL of them in ONE response.
+  
 - ALWAYS read a file before editing it
 - Return COMPLETE file content in edit_file (never partial)
-- Write production-quality code
-- Use modern best practices (ES6+, semantic HTML, CSS variables)
-- Make apps fully functional, not just UI mockups
-- Handle edge cases and errors properly
-- Add proper accessibility attributes
+- Write production-quality, modern code (ES6+, semantic HTML, CSS variables)
+- Make apps fully functional with proper error handling
 - Use dark theme by default
+- Add proper accessibility attributes
+
+## PARALLEL TOOL CALLS EXAMPLES
+
+Good (create 3 files at once):
+  → create_file("/index.html", ...) + create_file("/style.css", ...) + create_file("/app.js", ...)
+
+Good (read 3 files at once):
+  → read_file("/index.html") + read_file("/style.css") + read_file("/app.js")
+
+Bad (one file per turn):
+  → create_file("/index.html", ...) then wait... then create_file("/style.css", ...) then wait...
 
 ## IMPORTANT
-- You can call multiple tools in one response
-- Think step by step — don't rush to edit without reading first
-- Explain what you're doing between tool calls so the user can follow along`;
-
-function getGeminiKeys(): string[] {
-  const raw = Deno.env.get("GEMINI_API_KEYS") || "";
-  return raw.split(",").map((k) => k.trim()).filter(Boolean);
-}
+- You can and SHOULD call multiple tools in one response
+- Think step by step but execute efficiently
+- Explain what you're doing between tool calls`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -138,7 +136,7 @@ serve(async (req) => {
       ...messages,
     ];
 
-    // Try Lovable AI Gateway first (supports tool calling)
+    // Try Lovable AI Gateway first
     if (LOVABLE_API_KEY) {
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -153,6 +151,7 @@ serve(async (req) => {
           max_tokens: 65536,
           temperature: requestTemp,
           tools: TOOLS,
+          parallel_tool_calls: true,
         }),
       });
 
@@ -173,7 +172,12 @@ serve(async (req) => {
       console.log(`Gateway returned ${response.status}, trying Gemini fallback...`);
     }
 
-    // Fallback to direct Gemini API with tool calling
+    // Fallback to direct Gemini API
+    const getGeminiKeys = (): string[] => {
+      const raw = Deno.env.get("GEMINI_API_KEYS") || "";
+      return raw.split(",").map((k) => k.trim()).filter(Boolean);
+    };
+
     const keys = customApiKey ? [customApiKey, ...getGeminiKeys()] : getGeminiKeys();
     if (keys.length === 0) {
       return new Response(
@@ -182,7 +186,7 @@ serve(async (req) => {
       );
     }
 
-    // Convert OpenAI format tools to Gemini format
+    // Convert tools to Gemini format
     const geminiTools = [{
       functionDeclarations: TOOLS.map(t => ({
         name: t.function.name,
@@ -196,7 +200,6 @@ serve(async (req) => {
       .filter(m => m.role !== "system")
       .map(m => {
         if (m.role === "assistant" && m.tool_calls) {
-          // Convert tool calls to Gemini format
           return {
             role: "model",
             parts: [
@@ -227,7 +230,7 @@ serve(async (req) => {
         };
       });
 
-    // Merge consecutive same-role messages (Gemini requirement)
+    // Merge consecutive same-role messages
     const mergedContents: any[] = [];
     for (const msg of contents) {
       if (mergedContents.length > 0 && mergedContents[mergedContents.length - 1].role === msg.role) {
@@ -284,7 +287,8 @@ serve(async (req) => {
                         choices: [{
                           delta: {
                             tool_calls: [{
-                              id: `call_${Date.now()}_${part.functionCall.name}`,
+                              id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${part.functionCall.name}`,
+                              index: 0,
                               type: "function",
                               function: {
                                 name: part.functionCall.name,
