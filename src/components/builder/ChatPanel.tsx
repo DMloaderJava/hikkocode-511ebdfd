@@ -295,6 +295,7 @@ export function ChatPanel() {
               type: typeMap[step.type] || "default",
               detail: step.detail || step.filePath,
               duration: step.duration,
+              content: step.content,
             };
             currentSteps = [...currentSteps, newStep];
             currentTask = { ...currentTask, steps: currentSteps };
