@@ -118,6 +118,16 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   const [planExpanded, setPlanExpanded] = useState(false);
   const [diffExpanded, setDiffExpanded] = useState(false);
   const [expandedDiffFile, setExpandedDiffFile] = useState<string | null>(null);
+  const [expandedThinkingSteps, setExpandedThinkingSteps] = useState<Set<string>>(new Set());
+
+  const toggleThinkingStep = (stepId: string) => {
+    setExpandedThinkingSteps(prev => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  };
 
   const doneCount = steps.filter((s) => s.status === "done").length;
   const isComplete = doneCount === steps.length && steps.length > 0;
