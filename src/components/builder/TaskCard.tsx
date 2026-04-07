@@ -37,6 +37,7 @@ export interface TaskStep {
   type?: "think" | "read" | "plan" | "edit" | "verify" | "analyze" | "create_file" | "add_styles" | "add_logic" | "add_component" | "configure" | "default";
   detail?: string;
   duration?: number;
+  content?: string;
 }
 
 interface TaskCardProps {
