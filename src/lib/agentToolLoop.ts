@@ -76,8 +76,82 @@ async function streamResponse(
   let textBuffer = "";
   let fullText = "";
   const toolCalls: ToolCall[] = [];
-  // Track partial tool call assembly
+  // Track tool calls by index for streaming assembly
   const partialToolCalls = new Map<number, { id: string; name: string; args: string }>();
+  // Track already-finalized tool call IDs to avoid duplicates
+  const finalizedIds = new Set<string>();
+
+  const processLine = (line: string) => {
+    if (line.startsWith(":") || line.trim() === "") return;
+    if (!line.startsWith("data: ")) return;
+    const jsonStr = line.slice(6).trim();
+    if (jsonStr === "[DONE]") return;
+
+    try {
+      const parsed = JSON.parse(jsonStr);
+      const choice = parsed.choices?.[0];
+      if (!choice) return;
+      const delta = choice.delta;
+      if (!delta) return;
+
+      // Text content
+      if (delta.content) {
+        fullText += delta.content;
+        onDelta(fullText);
+      }
+
+      // Tool calls — handle both streaming chunks and complete tool calls
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0;
+
+          if (tc.id && tc.function?.name) {
+            // Complete tool call (from Lovable AI Gateway) or new partial start
+            if (tc.function.arguments && tc.function.arguments.length > 2) {
+              // Complete tool call — add directly if not a duplicate
+              if (!finalizedIds.has(tc.id)) {
+                finalizedIds.add(tc.id);
+                toolCalls.push({
+                  id: tc.id,
+                  function: {
+                    name: tc.function.name,
+                    arguments: tc.function.arguments,
+                  },
+                });
+              }
+            } else {
+              // Start of a streaming tool call
+              partialToolCalls.set(idx, {
+                id: tc.id,
+                name: tc.function.name,
+                args: tc.function.arguments || "",
+              });
+            }
+          } else if (tc.function?.arguments) {
+            // Append arguments to existing partial
+            const existing = partialToolCalls.get(idx);
+            if (existing) existing.args += tc.function.arguments;
+          }
+        }
+      }
+
+      // On finish_reason "tool_calls", finalize any remaining partials
+      if (choice.finish_reason === "tool_calls" || choice.finish_reason === "stop") {
+        for (const [, ptc] of partialToolCalls) {
+          if (!finalizedIds.has(ptc.id) && ptc.name) {
+            finalizedIds.add(ptc.id);
+            toolCalls.push({
+              id: ptc.id,
+              function: { name: ptc.name, arguments: ptc.args || "{}" },
+            });
+          }
+        }
+        partialToolCalls.clear();
+      }
+    } catch {
+      // Skip unparseable lines
+    }
+  };
 
   while (true) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
@@ -90,91 +164,26 @@ async function streamResponse(
       let line = textBuffer.slice(0, newlineIndex);
       textBuffer = textBuffer.slice(newlineIndex + 1);
       if (line.endsWith("\r")) line = line.slice(0, -1);
-      if (line.startsWith(":") || line.trim() === "") continue;
-      if (!line.startsWith("data: ")) continue;
-      const jsonStr = line.slice(6).trim();
-      if (jsonStr === "[DONE]") break;
-
-      try {
-        const parsed = JSON.parse(jsonStr);
-        const delta = parsed.choices?.[0]?.delta;
-        if (!delta) continue;
-
-        // Text content
-        if (delta.content) {
-          fullText += delta.content;
-          onDelta(fullText);
-        }
-
-        // Tool calls
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            const idx = tc.index ?? 0;
-            if (tc.id || tc.function?.name) {
-              // New tool call start
-              partialToolCalls.set(idx, {
-                id: tc.id || `call_${Date.now()}`,
-                name: tc.function?.name || "",
-                args: tc.function?.arguments || "",
-              });
-            } else if (tc.function?.arguments) {
-              // Append to existing
-              const existing = partialToolCalls.get(idx);
-              if (existing) existing.args += tc.function.arguments;
-            }
-          }
-        }
-
-        // Check finish reason
-        if (parsed.choices?.[0]?.finish_reason === "tool_calls") {
-          // Finalize all partial tool calls
-          for (const [, ptc] of partialToolCalls) {
-            toolCalls.push({
-              id: ptc.id,
-              function: { name: ptc.name, arguments: ptc.args },
-            });
-          }
-          partialToolCalls.clear();
-        }
-      } catch {
-        textBuffer = line + "\n" + textBuffer;
-        break;
-      }
+      processLine(line);
     }
   }
 
-  // Flush remaining
+  // Process remaining buffer
   if (textBuffer.trim()) {
-    for (let raw of textBuffer.split("\n")) {
-      if (!raw || raw.startsWith(":") || raw.trim() === "") continue;
-      if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-      if (!raw.startsWith("data: ")) continue;
-      const jsonStr = raw.slice(6).trim();
-      if (jsonStr === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(jsonStr);
-        const delta = parsed.choices?.[0]?.delta;
-        if (delta?.content) fullText += delta.content;
-        if (delta?.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            if (tc.id && tc.function) {
-              toolCalls.push({
-                id: tc.id,
-                function: { name: tc.function.name, arguments: tc.function.arguments || "{}" },
-              });
-            }
-          }
-        }
-      } catch { /* ignore */ }
+    for (const line of textBuffer.split("\n")) {
+      processLine(line.endsWith("\r") ? line.slice(0, -1) : line);
     }
   }
 
-  // Finalize any remaining partial tool calls
+  // Finalize any remaining partials
   for (const [, ptc] of partialToolCalls) {
-    toolCalls.push({
-      id: ptc.id,
-      function: { name: ptc.name, arguments: ptc.args },
-    });
+    if (!finalizedIds.has(ptc.id) && ptc.name) {
+      finalizedIds.add(ptc.id);
+      toolCalls.push({
+        id: ptc.id,
+        function: { name: ptc.name, arguments: ptc.args || "{}" },
+      });
+    }
   }
 
   return { textContent: fullText, toolCalls };
@@ -191,7 +200,16 @@ function resolveToolCall(
   let args: any = {};
   try { args = JSON.parse(tc.function.arguments); } catch { /* empty */ }
 
-  const normPath = (p: string) => p.startsWith("/") ? p : `/${p}`;
+  const normPath = (p: string) => {
+    if (!p) return "/";
+    return p.startsWith("/") ? p : `/${p}`;
+  };
+
+  const langMap: Record<string, string> = {
+    html: "html", htm: "html", css: "css", js: "javascript", jsx: "javascript",
+    ts: "typescript", tsx: "typescript", json: "json", md: "markdown",
+    yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", sh: "bash", svg: "xml",
+  };
 
   switch (name) {
     case "list_files": {
@@ -208,84 +226,47 @@ function resolveToolCall(
     }
 
     case "read_file": {
-      const path = normPath(args.path || "");
+      const path = normPath(args.path);
       const file = files.get(path);
       if (file) {
-        return {
-          result: file.content,
-          stepType: "reading",
-          label: `Read ${path.split("/").pop()}`,
-        };
+        return { result: file.content, stepType: "reading", label: `Read ${path.split("/").pop()}` };
       }
-      return {
-        result: `Error: File not found: ${path}`,
-        stepType: "reading",
-        label: `File not found: ${path.split("/").pop()}`,
-      };
+      return { result: `Error: File not found: ${path}`, stepType: "reading", label: `File not found: ${path.split("/").pop()}` };
     }
 
     case "edit_file": {
-      const path = normPath(args.path || "");
+      const path = normPath(args.path);
       const content = args.content || "";
       const desc = args.description || "Updated file";
       const fileName = path.split("/").pop() || path;
       const ext = fileName.split(".").pop()?.toLowerCase() || "text";
-      const langMap: Record<string, string> = {
-        html: "html", htm: "html", css: "css", js: "javascript", jsx: "javascript",
-        ts: "typescript", tsx: "typescript", json: "json", md: "markdown",
-        yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", sh: "bash", svg: "xml",
-      };
 
-      const file: GeneratedFile = {
-        name: fileName,
-        path,
-        content,
-        language: langMap[ext] || "text",
-      };
+      const file: GeneratedFile = { name: fileName, path, content, language: langMap[ext] || "text" };
       files.set(path, file);
       callbacks.onFileChanged(path, file);
-      return {
-        result: `Successfully edited ${path}: ${desc}`,
-        stepType: "editing",
-        label: `Edited ${fileName}`,
-      };
+      return { result: `Successfully edited ${path}: ${desc}`, stepType: "editing", label: `Edited ${fileName}` };
     }
 
     case "create_file": {
-      const path = normPath(args.path || "");
+      const path = normPath(args.path);
       const content = args.content || "";
       const fileName = path.split("/").pop() || path;
       const ext = fileName.split(".").pop()?.toLowerCase() || "text";
-      const langMap: Record<string, string> = {
-        html: "html", htm: "html", css: "css", js: "javascript", jsx: "javascript",
-        ts: "typescript", tsx: "typescript", json: "json", md: "markdown",
-        yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", sh: "bash", svg: "xml",
-      };
 
       const file: GeneratedFile = {
-        name: fileName,
-        path,
-        content,
+        name: fileName, path, content,
         language: args.language || langMap[ext] || "text",
       };
       files.set(path, file);
       callbacks.onFileChanged(path, file);
-      return {
-        result: `Successfully created ${path}`,
-        stepType: "creating",
-        label: `Created ${fileName}`,
-      };
+      return { result: `Successfully created ${path}`, stepType: "creating", label: `Created ${fileName}` };
     }
 
     case "delete_file": {
-      const path = normPath(args.path || "");
+      const path = normPath(args.path);
       files.delete(path);
       callbacks.onFileDeleted(path);
-      return {
-        result: `Successfully deleted ${path}`,
-        stepType: "deleting",
-        label: `Deleted ${path.split("/").pop()}`,
-      };
+      return { result: `Successfully deleted ${path}`, stepType: "deleting", label: `Deleted ${path.split("/").pop()}` };
     }
 
     default:
@@ -295,7 +276,7 @@ function resolveToolCall(
 
 // ─── Main Agent Loop ───
 
-const MAX_TURNS = 20; // Safety limit
+const MAX_TURNS = 20;
 
 export async function runAgentLoop(
   prompt: string,
@@ -315,22 +296,21 @@ export async function runAgentLoop(
     files.set(path, { ...f, path });
   }
 
-  // Build initial context message
+  // Build initial context
   const fileIndex = buildFileIndex(existingFiles);
   const contextMsg = fileIndex.length > 0
     ? `Project has ${fileIndex.length} files:\n${fileIndex.map(f => `- ${f.path} (${f.language}, ${f.size} bytes)`).join("\n")}\n\nUser request: ${prompt}`
     : prompt;
 
-  // Conversation history for multi-turn
   const messages: any[] = [{ role: "user", content: contextMsg }];
 
   let stepCounter = 0;
   const makeStepId = () => `step-${++stepCounter}`;
 
   // Initial thinking step
-  const thinkingStepId = makeStepId();
+  let currentThinkingStepId = makeStepId();
   callbacks.onStep({
-    id: thinkingStepId,
+    id: currentThinkingStepId,
     type: "thinking",
     label: "Thinking...",
     status: "in_progress",
@@ -339,7 +319,6 @@ export async function runAgentLoop(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const startTime = Date.now();
 
-    // Call API
     const resp = await fetch(AGENT_V2_URL, {
       method: "POST",
       headers,
@@ -356,7 +335,6 @@ export async function runAgentLoop(
       throw new Error(errData.error || `Agent error ${resp.status}`);
     }
 
-    // Stream the response
     const { textContent, toolCalls } = await streamResponse(
       resp,
       (text) => callbacks.onThinkingStream(text),
@@ -365,9 +343,9 @@ export async function runAgentLoop(
 
     const elapsed = Date.now() - startTime;
 
-    // Update thinking step with content
+    // Update thinking step
     if (textContent.trim()) {
-      callbacks.onStepUpdate(thinkingStepId, {
+      callbacks.onStepUpdate(currentThinkingStepId, {
         status: "done",
         content: textContent,
         duration: elapsed,
@@ -381,7 +359,7 @@ export async function runAgentLoop(
       break;
     }
 
-    // Add assistant message with tool calls to history
+    // Add assistant message with tool calls
     messages.push({
       role: "assistant",
       content: textContent || null,
@@ -395,6 +373,9 @@ export async function runAgentLoop(
     // Execute each tool call
     for (const tc of toolCalls) {
       const tcStepId = makeStepId();
+      let parsedArgs: any = {};
+      try { parsedArgs = JSON.parse(tc.function.arguments); } catch { /* empty */ }
+
       const { result, stepType, label } = resolveToolCall(tc, files, callbacks);
 
       callbacks.onStep({
@@ -402,13 +383,12 @@ export async function runAgentLoop(
         type: stepType,
         label,
         status: "done",
-        detail: tc.function.name === "read_file" ? JSON.parse(tc.function.arguments).path : undefined,
+        detail: parsedArgs.path || undefined,
         filePath: ["edit_file", "create_file", "delete_file"].includes(tc.function.name)
-          ? (JSON.parse(tc.function.arguments).path || "")
+          ? (parsedArgs.path || "")
           : undefined,
       });
 
-      // Add tool result to conversation
       messages.push({
         role: "tool",
         tool_call_id: tc.id,
@@ -417,24 +397,23 @@ export async function runAgentLoop(
       });
     }
 
-    // Create new thinking step for next turn
-    const nextThinkingId = makeStepId();
-    callbacks.onStep({
-      id: nextThinkingId,
-      type: "understanding",
-      label: toolCalls.some(tc => tc.function.name === "edit_file" || tc.function.name === "create_file")
-        ? "Verifying changes..."
-        : "Processing...",
-      status: "in_progress",
-    });
+    // Summary of what happened this turn
+    const editCount = toolCalls.filter(tc => ["edit_file", "create_file"].includes(tc.function.name)).length;
+    const readCount = toolCalls.filter(tc => tc.function.name === "read_file").length;
 
-    // Point to current thinking step for streaming updates
-    // (thinkingStepId is now the new one)
-    Object.assign(callbacks, {
-      _currentThinkingStepId: nextThinkingId,
+    let nextLabel = "Processing...";
+    if (editCount > 0) nextLabel = "Verifying changes...";
+    else if (readCount > 0) nextLabel = "Analyzing files...";
+
+    // Create new thinking step for next turn
+    currentThinkingStepId = makeStepId();
+    callbacks.onStep({
+      id: currentThinkingStepId,
+      type: editCount > 0 ? "understanding" : "thinking",
+      label: nextLabel,
+      status: "in_progress",
     });
   }
 
-  // Return final file state
   return Array.from(files.values());
 }
