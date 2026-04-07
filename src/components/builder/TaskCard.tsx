@@ -365,65 +365,97 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                   ? stepColors[step.type || "default"]
                   : "text-muted-foreground/30";
 
+                const hasContent = step.content && step.content.trim().length > 0;
+                const isThinkingType = step.type === "think" || step.type === "analyze";
+                const isContentExpanded = expandedThinkingSteps.has(step.id);
+                const showToggle = hasContent && step.status === "done" && isThinkingType;
+
                 return (
                   <motion.div
                     key={step.id}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.03 }}
-                    className={`flex items-start gap-2.5 py-0.5 ${
+                    className={`py-0.5 ${
                       step.status === "in_progress" ? "bg-secondary/20 -mx-2 px-2 rounded-lg" : ""
                     }`}
                   >
-                    <div className="mt-0.5 flex-shrink-0">
-                      {step.status === "done" ? (
-                        <div className="w-4 h-4 rounded-full bg-foreground/80 flex items-center justify-center">
-                          <Check className="w-2.5 h-2.5 text-background" />
+                    <div className="flex items-start gap-2.5">
+                      <div className="mt-0.5 flex-shrink-0">
+                        {step.status === "done" ? (
+                          <div className="w-4 h-4 rounded-full bg-foreground/80 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-background" />
+                          </div>
+                        ) : step.status === "in_progress" ? (
+                          <Loader2 className={`w-4 h-4 animate-spin ${colorClass}`} />
+                        ) : (
+                          <Circle className="w-4 h-4 text-muted-foreground/20" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`flex items-center gap-2 ${showToggle ? "cursor-pointer hover:opacity-80" : ""}`}
+                          onClick={showToggle ? () => toggleThinkingStep(step.id) : undefined}
+                        >
+                          <IconComponent className={`w-3 h-3 flex-shrink-0 ${colorClass}`} />
+                          <span className={`text-xs ${
+                            step.status === "done" ? "text-foreground/70"
+                              : step.status === "in_progress" ? "text-foreground font-medium"
+                              : "text-muted-foreground/50"
+                          }`}>
+                            {step.label}
+                          </span>
+                          {step.duration && step.status === "done" && (
+                            <span className="text-[10px] text-muted-foreground/50">
+                              {formatDuration(step.duration)}
+                            </span>
+                          )}
+                          {showToggle && (
+                            <ChevronRight className={`w-3 h-3 text-muted-foreground/40 transition-transform ${isContentExpanded ? "rotate-90" : ""}`} />
+                          )}
                         </div>
-                      ) : step.status === "in_progress" ? (
-                        <Loader2 className={`w-4 h-4 animate-spin ${colorClass}`} />
-                      ) : (
-                        <Circle className="w-4 h-4 text-muted-foreground/20" />
+                        {step.detail && (
+                          <p className={`text-[11px] mt-0.5 ml-5 font-mono ${
+                            step.status === "in_progress" ? "text-muted-foreground" : "text-muted-foreground/50"
+                          }`}>
+                            {step.detail}
+                          </p>
+                        )}
+                      </div>
+                      {/* Skip button for pending file steps */}
+                      {step.status === "pending" && (step.type === "edit" || step.type === "create_file") && onSkipFile && step.detail && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSkipFile(step.detail!);
+                          }}
+                          className="flex-shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                          title={`Skip ${step.detail}`}
+                        >
+                          <SkipForward className="w-3 h-3" />
+                        </button>
                       )}
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <IconComponent className={`w-3 h-3 flex-shrink-0 ${colorClass}`} />
-                        <span className={`text-xs ${
-                          step.status === "done" ? "text-foreground/70"
-                            : step.status === "in_progress" ? "text-foreground font-medium"
-                            : "text-muted-foreground/50"
-                        }`}>
-                          {step.label}
-                        </span>
-                        {step.duration && step.status === "done" && (
-                          <span className="text-[10px] text-muted-foreground/50">
-                            {formatDuration(step.duration)}
-                          </span>
-                        )}
-                      </div>
-                      {step.detail && (
-                        <p className={`text-[11px] mt-0.5 ml-5 font-mono ${
-                          step.status === "in_progress" ? "text-muted-foreground" : "text-muted-foreground/50"
-                        }`}>
-                          {step.detail}
-                        </p>
+                    {/* Collapsible thinking content */}
+                    <AnimatePresence>
+                      {isContentExpanded && hasContent && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="ml-6.5 mt-1.5 mb-1 p-2.5 rounded-lg bg-secondary/50 border border-border/50">
+                            <pre className="text-[11px] text-foreground/60 leading-relaxed whitespace-pre-wrap break-words font-mono max-h-60 overflow-y-auto scrollbar-thin">
+                              {step.content}
+                            </pre>
+                          </div>
+                        </motion.div>
                       )}
-                    </div>
-                    {/* Skip button for pending file steps */}
-                    {step.status === "pending" && (step.type === "edit" || step.type === "create_file") && onSkipFile && step.detail && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSkipFile(step.detail!);
-                        }}
-                        className="flex-shrink-0 p-0.5 rounded text-muted-foreground/40 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                        title={`Skip ${step.detail}`}
-                      >
-                        <SkipForward className="w-3 h-3" />
-                      </button>
-                    )}
+                    </AnimatePresence>
                   </motion.div>
                 );
               })}
