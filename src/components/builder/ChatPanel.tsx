@@ -362,6 +362,7 @@ export function ChatPanel() {
           signal: controller.signal,
         },
         getStoredApiKey() || undefined,
+        agentMode,
       );
 
       // Compute final diff
