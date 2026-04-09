@@ -270,6 +270,8 @@ export function ChatPanel() {
 
     const changedFiles: string[] = [];
     const oldFiles = [...activeProject.files];
+    // Local accumulator to avoid stale closure
+    const localFilesRef: GeneratedFile[] = [...activeProject.files];
 
     try {
       // Run the new agent loop with tool-calling
@@ -278,7 +280,6 @@ export function ChatPanel() {
         activeProject.files,
         {
           onStep: (step: AgentToolStep) => {
-            // Map AgentToolStep to TaskStep
             const typeMap: Record<string, TaskStep["type"]> = {
               thinking: "think",
               reading: "read",
@@ -303,7 +304,6 @@ export function ChatPanel() {
             currentTask = { ...currentTask, steps: currentSteps };
             updateLastAssistantTask(activeProject.id, currentTask);
 
-            // Update loading message
             const iconMap: Record<string, string> = {
               thinking: "🧠", reading: "📖", understanding: "💡",
               editing: "✏️", creating: "📄", deleting: "🗑️", listing: "📁",
@@ -318,7 +318,6 @@ export function ChatPanel() {
             updateLastAssistantTask(activeProject.id, currentTask);
           },
           onThinkingStream: (text: string) => {
-            // Show streaming thinking in message content
             updateLastAssistantMessage(activeProject.id, text);
           },
           onFileChanged: (path: string, file: GeneratedFile) => {
@@ -330,21 +329,20 @@ export function ChatPanel() {
             };
             updateLastAssistantTask(activeProject.id, currentTask);
 
-            // Apply file immediately
-            const currentFiles = activeProject.files;
-            const existingIdx = currentFiles.findIndex(f => f.path === path);
-            let newFiles: GeneratedFile[];
+            // Use local accumulator — NOT stale activeProject.files
+            const existingIdx = localFilesRef.findIndex(f => f.path === path);
             if (existingIdx >= 0) {
-              newFiles = currentFiles.map((f, i) => i === existingIdx ? file : f);
+              localFilesRef[existingIdx] = file;
             } else {
-              newFiles = [...currentFiles, file];
+              localFilesRef.push(file);
             }
-            setFiles(activeProject.id, newFiles, `${prompt.trim()} [${path}]`);
+            setFiles(activeProject.id, [...localFilesRef], `${prompt.trim()} [${path}]`);
           },
           onFileDeleted: (path: string) => {
             if (!changedFiles.includes(path)) changedFiles.push(path);
-            const currentFiles = activeProject.files.filter(f => f.path !== path);
-            setFiles(activeProject.id, currentFiles, `${prompt.trim()} [deleted ${path}]`);
+            const idx = localFilesRef.findIndex(f => f.path === path);
+            if (idx >= 0) localFilesRef.splice(idx, 1);
+            setFiles(activeProject.id, [...localFilesRef], `${prompt.trim()} [deleted ${path}]`);
           },
           onComplete: (summary: string) => {
             // Add final verify step
