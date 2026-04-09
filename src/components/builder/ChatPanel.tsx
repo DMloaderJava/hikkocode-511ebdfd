@@ -10,12 +10,13 @@ import {
   LayoutGrid,
   Square,
   StopCircle,
+  Zap,
 } from "lucide-react";
 import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/context/AppContext";
 import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
 import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { buildFileTasks, executePerFile } from "@/lib/perFileAgent";
-import { runAgentLoop, type AgentStep as AgentToolStep } from "@/lib/agentToolLoop";
+import { runAgentLoop, type AgentStep as AgentToolStep, type AgentMode } from "@/lib/agentToolLoop";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
@@ -145,6 +146,7 @@ export function ChatPanel() {
   } = useApp();
   const [input, setInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [agentMode, setAgentMode] = useState<AgentMode>("hikkocode");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
