@@ -523,7 +523,20 @@ export function ChatPanel() {
               }}
             />
             <div className="flex items-center justify-between px-2 pb-2">
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAgentMode(prev => prev === "hikkocode" ? "openclaw" : "hikkocode")}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors ${
+                    agentMode === "openclaw"
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                  title={`Agent: ${agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}`}
+                >
+                  <Zap className="w-3 h-3" />
+                  {agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}
+                </button>
                 <button
                   type="button"
                   onClick={() => setInput((prev) => prev + "\nPlease provide a visual/UI-focused update. ")}
