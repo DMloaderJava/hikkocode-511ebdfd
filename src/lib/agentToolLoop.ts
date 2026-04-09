@@ -326,7 +326,7 @@ export async function runAgentLoop(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const startTime = Date.now();
 
-    const resp = await fetch(AGENT_V2_URL, {
+    const resp = await fetch(AGENT_URL, {
       method: "POST",
       headers,
       body: JSON.stringify({
