@@ -19,19 +19,19 @@ export function LivePreview({ device = "desktop", refreshKey = 0 }: LivePreviewP
     const cssFiles = files.filter((f) => f.language === "css");
     const jsFiles = files.filter((f) => f.language === "javascript" || f.language === "typescript");
 
-    if (!htmlFile) return null;
+    if (!htmlFile) {
+      // No HTML file — try to build a minimal page from CSS/JS only
+      if (cssFiles.length === 0 && jsFiles.length === 0) return null;
+      const css = cssFiles.map(f => f.content).join("\n");
+      const js = jsFiles.map(f => f.content).join("\n;\n");
+      return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>${css}</style></head><body><script>${js}<\/script></body></html>`;
+    }
 
     let html = htmlFile.content;
 
     // Build a set of local file names to remove their tags (but keep CDN scripts)
-    const localJsNames = jsFiles.map((f) => {
-      const name = f.path.replace(/^\//, "");
-      return name;
-    });
-    const localCssNames = cssFiles.map((f) => {
-      const name = f.path.replace(/^\//, "");
-      return name;
-    });
+    const localJsNames = jsFiles.map((f) => f.path.replace(/^\//, ""));
+    const localCssNames = cssFiles.map((f) => f.path.replace(/^\//, ""));
 
     // Replace only LOCAL link tags (not CDN ones)
     for (const cssName of localCssNames) {
@@ -50,7 +50,7 @@ export function LivePreview({ device = "desktop", refreshKey = 0 }: LivePreviewP
       }
     }
 
-    // Replace only LOCAL script tags (not CDN ones like https://cdnjs...)
+    // Replace only LOCAL script tags (not CDN ones)
     for (const jsName of localJsNames) {
       const escapedName = jsName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const regex = new RegExp(`<script[^>]*src=["'](?:\\.?\\/?)${escapedName}["'][^>]*><\\/script>`, "gi");
