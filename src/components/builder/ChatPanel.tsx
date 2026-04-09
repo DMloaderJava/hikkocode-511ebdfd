@@ -10,12 +10,13 @@ import {
   LayoutGrid,
   Square,
   StopCircle,
+  Zap,
 } from "lucide-react";
 import { useApp, ChatMessage, GeneratedFile, GenerationTask, TaskStep } from "@/context/AppContext";
 import { buildSmartContext, buildFullContext } from "@/lib/fileTools";
 import { diffFiles, diffSummary, type FileDiff } from "@/lib/diff";
 import { buildFileTasks, executePerFile } from "@/lib/perFileAgent";
-import { runAgentLoop, type AgentStep as AgentToolStep } from "@/lib/agentToolLoop";
+import { runAgentLoop, type AgentStep as AgentToolStep, type AgentMode } from "@/lib/agentToolLoop";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { TaskCard } from "./TaskCard";
@@ -145,6 +146,7 @@ export function ChatPanel() {
   } = useApp();
   const [input, setInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [agentMode, setAgentMode] = useState<AgentMode>("hikkocode");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -360,6 +362,7 @@ export function ChatPanel() {
           signal: controller.signal,
         },
         getStoredApiKey() || undefined,
+        agentMode,
       );
 
       // Compute final diff
@@ -520,7 +523,20 @@ export function ChatPanel() {
               }}
             />
             <div className="flex items-center justify-between px-2 pb-2">
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setAgentMode(prev => prev === "hikkocode" ? "openclaw" : "hikkocode")}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors ${
+                    agentMode === "openclaw"
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                  title={`Agent: ${agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}`}
+                >
+                  <Zap className="w-3 h-3" />
+                  {agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}
+                </button>
                 <button
                   type="button"
                   onClick={() => setInput((prev) => prev + "\nPlease provide a visual/UI-focused update. ")}
