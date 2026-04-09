@@ -5,7 +5,12 @@
 
 import { GeneratedFile } from "@/context/AppContext";
 
-const AGENT_V2_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-v2`;
+export type AgentMode = "hikkocode" | "openclaw";
+
+const AGENT_URLS: Record<AgentMode, string> = {
+  hikkocode: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-v2`,
+  openclaw: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-openclaw`,
+};
 
 // ─── Types ───
 
@@ -283,7 +288,9 @@ export async function runAgentLoop(
   existingFiles: GeneratedFile[],
   callbacks: AgentCallbacks,
   customApiKey?: string,
+  agentMode: AgentMode = "hikkocode",
 ): Promise<GeneratedFile[]> {
+  const AGENT_URL = AGENT_URLS[agentMode];
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
