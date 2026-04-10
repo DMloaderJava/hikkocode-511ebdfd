@@ -534,6 +534,22 @@ export function ChatPanel() {
       <div className="p-3 border-t border-border">
         <form onSubmit={handleSubmit}>
           <div className="bg-secondary/60 border border-border rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-ring/30 transition-shadow">
+            {attachedImage && (
+              <div className="px-3 pt-2 flex items-center gap-2">
+                <div className="relative group">
+                  <img src={attachedImage.preview} alt="Attached" className="h-16 w-16 rounded-lg object-cover border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setAttachedImage(null)}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+                <span className="text-xs text-muted-foreground">Image attached — Gemini will analyze it</span>
+              </div>
+            )}
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
             <textarea
               ref={textareaRef}
               value={input}
