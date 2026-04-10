@@ -598,9 +598,9 @@ export function ChatPanel() {
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => toast.info("Image attachments coming soon!")}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  title="Attach image"
+                  onClick={() => imageInputRef.current?.click()}
+                  className={`p-1.5 rounded-md transition-colors ${attachedImage ? 'text-primary' : 'text-muted-foreground hover:text-foreground'} hover:bg-secondary`}
+                  title="Attach image for analysis"
                 >
                   <Image className="w-3.5 h-3.5" />
                 </button>
