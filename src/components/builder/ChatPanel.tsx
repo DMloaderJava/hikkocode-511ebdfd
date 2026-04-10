@@ -146,7 +146,7 @@ export function ChatPanel() {
   } = useApp();
   const [input, setInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [agentMode, setAgentMode] = useState<AgentMode>("hikkocode");
+  const [agentMode, setAgentMode] = useState<AgentMode>("auto");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -526,16 +526,22 @@ export function ChatPanel() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setAgentMode(prev => prev === "hikkocode" ? "openclaw" : "hikkocode")}
+                  onClick={() => setAgentMode(prev => {
+                    const modes: AgentMode[] = ["auto", "hikkocode", "openclaw"];
+                    const idx = modes.indexOf(prev);
+                    return modes[(idx + 1) % modes.length];
+                  })}
                   className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors ${
-                    agentMode === "openclaw"
+                    agentMode === "auto"
                       ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                      : agentMode === "openclaw"
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                   }`}
-                  title={`Agent: ${agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}`}
+                  title={`Agent: ${agentMode === "auto" ? "Auto (OpenClaw)" : agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}`}
                 >
                   <Zap className="w-3 h-3" />
-                  {agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}
+                  {agentMode === "auto" ? "Auto" : agentMode === "hikkocode" ? "hikkocode" : "OpenClaw"}
                 </button>
                 <button
                   type="button"

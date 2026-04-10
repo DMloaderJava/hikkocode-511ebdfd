@@ -5,9 +5,10 @@
 
 import { GeneratedFile } from "@/context/AppContext";
 
-export type AgentMode = "hikkocode" | "openclaw";
+export type AgentMode = "auto" | "hikkocode" | "openclaw";
 
 const AGENT_URLS: Record<AgentMode, string> = {
+  auto: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-openclaw`,
   hikkocode: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-v2`,
   openclaw: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-openclaw`,
 };
@@ -288,7 +289,7 @@ export async function runAgentLoop(
   existingFiles: GeneratedFile[],
   callbacks: AgentCallbacks,
   customApiKey?: string,
-  agentMode: AgentMode = "hikkocode",
+  agentMode: AgentMode = "auto",
 ): Promise<GeneratedFile[]> {
   const AGENT_URL = AGENT_URLS[agentMode];
   const headers = {
