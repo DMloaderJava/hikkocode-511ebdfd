@@ -229,9 +229,33 @@ export function ChatPanel() {
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only image files are supported");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be under 10MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      setAttachedImage({ base64, mimeType: file.type, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
   const submitPrompt = async (initialPrompt: string) => {
     if (!initialPrompt.trim() || isGenerating || !activeProject) return;
     const prompt = initialPrompt;
+    const currentImage = attachedImage;
+    setAttachedImage(null);
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
