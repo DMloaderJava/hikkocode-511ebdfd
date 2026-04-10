@@ -147,8 +147,10 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>("auto");
+  const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const skippedFilesRef = useRef<Set<string>>(new Set());
   const location = useLocation();
