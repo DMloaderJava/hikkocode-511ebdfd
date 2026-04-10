@@ -387,6 +387,7 @@ export function ChatPanel() {
         },
         getStoredApiKey() || undefined,
         agentMode,
+        currentImage ? { base64: currentImage.base64, mimeType: currentImage.mimeType } : null,
       );
 
       // Compute final diff
