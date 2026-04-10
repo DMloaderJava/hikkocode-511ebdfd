@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";  // Измените на HashRouter
 import { AppProvider, useApp } from "@/context/AppContext";
 import Landing from "./pages/Landing";
 import Builder from "./pages/Builder";
@@ -61,13 +61,13 @@ function AppRoutes() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <BrowserRouter>
+      <HashRouter basename="/">  {/* Измените на HashRouter с basename="/" */}
         <AppProvider>
           <Toaster />
           <Sonner />
           <AppRoutes />
         </AppProvider>
-      </BrowserRouter>
+      </HashRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
