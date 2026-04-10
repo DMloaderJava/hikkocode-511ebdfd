@@ -147,8 +147,10 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>("auto");
+  const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const skippedFilesRef = useRef<Set<string>>(new Set());
   const location = useLocation();
@@ -227,9 +229,33 @@ export function ChatPanel() {
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only image files are supported");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image must be under 10MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      setAttachedImage({ base64, mimeType: file.type, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
   const submitPrompt = async (initialPrompt: string) => {
     if (!initialPrompt.trim() || isGenerating || !activeProject) return;
     const prompt = initialPrompt;
+    const currentImage = attachedImage;
+    setAttachedImage(null);
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -361,6 +387,7 @@ export function ChatPanel() {
         },
         getStoredApiKey() || undefined,
         agentMode,
+        currentImage ? { base64: currentImage.base64, mimeType: currentImage.mimeType } : null,
       );
 
       // Compute final diff
@@ -507,6 +534,22 @@ export function ChatPanel() {
       <div className="p-3 border-t border-border">
         <form onSubmit={handleSubmit}>
           <div className="bg-secondary/60 border border-border rounded-xl overflow-hidden focus-within:ring-1 focus-within:ring-ring/30 transition-shadow">
+            {attachedImage && (
+              <div className="px-3 pt-2 flex items-center gap-2">
+                <div className="relative group">
+                  <img src={attachedImage.preview} alt="Attached" className="h-16 w-16 rounded-lg object-cover border border-border" />
+                  <button
+                    type="button"
+                    onClick={() => setAttachedImage(null)}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+                <span className="text-xs text-muted-foreground">Image attached — Gemini will analyze it</span>
+              </div>
+            )}
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
             <textarea
               ref={textareaRef}
               value={input}
@@ -555,9 +598,9 @@ export function ChatPanel() {
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
-                  onClick={() => toast.info("Image attachments coming soon!")}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  title="Attach image"
+                  onClick={() => imageInputRef.current?.click()}
+                  className={`p-1.5 rounded-md transition-colors ${attachedImage ? 'text-primary' : 'text-muted-foreground hover:text-foreground'} hover:bg-secondary`}
+                  title="Attach image for analysis"
                 >
                   <Image className="w-3.5 h-3.5" />
                 </button>
@@ -598,7 +641,7 @@ export function ChatPanel() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() && !attachedImage}
                     className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
                   >
                     <ArrowUp className="w-3.5 h-3.5 text-background" />

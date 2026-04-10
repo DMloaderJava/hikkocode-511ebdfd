@@ -290,6 +290,7 @@ export async function runAgentLoop(
   callbacks: AgentCallbacks,
   customApiKey?: string,
   agentMode: AgentMode = "auto",
+  imageData?: { base64: string; mimeType: string } | null,
 ): Promise<GeneratedFile[]> {
   const AGENT_URL = AGENT_URLS[agentMode];
   const headers = {
@@ -306,11 +307,27 @@ export async function runAgentLoop(
 
   // Build initial context
   const fileIndex = buildFileIndex(existingFiles);
-  const contextMsg = fileIndex.length > 0
+  const textPart = fileIndex.length > 0
     ? `Project has ${fileIndex.length} files:\n${fileIndex.map(f => `- ${f.path} (${f.language}, ${f.size} bytes)`).join("\n")}\n\nUser request: ${prompt}`
     : prompt;
 
-  const messages: any[] = [{ role: "user", content: contextMsg }];
+  // Build multimodal or text-only user message
+  let userContent: any;
+  if (imageData) {
+    userContent = [
+      { type: "text", text: textPart },
+      {
+        type: "image_url",
+        image_url: {
+          url: `data:${imageData.mimeType};base64,${imageData.base64}`,
+        },
+      },
+    ];
+  } else {
+    userContent = textPart;
+  }
+
+  const messages: any[] = [{ role: "user", content: userContent }];
 
   let stepCounter = 0;
   const makeStepId = () => `step-${++stepCounter}`;
