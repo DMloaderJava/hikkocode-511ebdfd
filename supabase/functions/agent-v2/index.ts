@@ -224,9 +224,27 @@ serve(async (req) => {
             }],
           };
         }
+        // Handle multimodal content (array with text + image_url)
+        if (Array.isArray(m.content)) {
+          const parts: any[] = [];
+          for (const part of m.content) {
+            if (part.type === "text") {
+              parts.push({ text: part.text });
+            } else if (part.type === "image_url" && part.image_url?.url) {
+              const dataUrl = part.image_url.url;
+              const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+              if (match) {
+                parts.push({
+                  inlineData: { mimeType: match[1], data: match[2] },
+                });
+              }
+            }
+          }
+          return { role: m.role === "assistant" ? "model" : "user", parts };
+        }
         return {
           role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
+          parts: [{ text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) }],
         };
       });
 
