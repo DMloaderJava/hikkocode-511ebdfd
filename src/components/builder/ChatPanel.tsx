@@ -450,21 +450,23 @@ export function ChatPanel() {
                   ) : (
                     <div className="space-y-3">
                       {msg.task && (
-                        <TaskCard
-                          title={msg.task.title}
-                          steps={msg.task.steps}
-                          toolCount={msg.task.toolCount}
-                          filesChanged={msg.task.filesChanged}
-                          thinkingTime={msg.task.thinkingTime}
-                          fileProgress={msg.task.fileProgress}
-                          onSkipFile={isGenerating ? (path) => {
-                            skippedFilesRef.current?.add(path);
-                          } : undefined}
-                          plan={msg.task.plan}
-                          diffs={msg.task.diffs}
-                          diffSummaryText={msg.task.diffSummary}
-                          timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        />
+                        <div>
+                          <TaskCard
+                            title={msg.task.title}
+                            steps={msg.task.steps}
+                            toolCount={msg.task.toolCount}
+                            filesChanged={msg.task.filesChanged}
+                            thinkingTime={msg.task.thinkingTime}
+                            fileProgress={msg.task.fileProgress}
+                            onSkipFile={isGenerating ? (path) => {
+                              skippedFilesRef.current?.add(path);
+                            } : undefined}
+                            plan={msg.task.plan}
+                            diffs={msg.task.diffs}
+                            diffSummaryText={msg.task.diffSummary}
+                            timestamp={msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          />
+                        </div>
                       )}
                       {msg.content && (
                         <div className="flex gap-2.5">
