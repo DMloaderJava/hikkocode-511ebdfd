@@ -641,7 +641,7 @@ export function ChatPanel() {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() && !attachedImage}
                     className="w-7 h-7 rounded-full bg-foreground flex items-center justify-center ml-1 disabled:opacity-30 transition-opacity"
                   >
                     <ArrowUp className="w-3.5 h-3.5 text-background" />
