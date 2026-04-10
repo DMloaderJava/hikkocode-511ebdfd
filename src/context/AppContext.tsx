@@ -1,6 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
 
 export interface GeneratedFile {
   name: string;
@@ -74,7 +72,7 @@ interface AppState {
   isGenerating: boolean;
   loadingMessage: string;
   activeFile: GeneratedFile | null;
-  user: User | null;
+  user: null; // No auth for GitHub Pages
   authLoading: boolean;
 }
 
@@ -114,88 +112,56 @@ export const funnyLoadingMessages = [
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// LocalStorage helpers
+const STORAGE_KEY = "hikkocode_projects";
+
+function loadProjectsFromStorage(): Project[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) return [];
+    
+    const projects = JSON.parse(data) as any[];
+    return projects.map(p => ({
+      ...p,
+      createdAt: new Date(p.createdAt),
+      messages: p.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })),
+      history: p.history.map((h: any) => ({ ...h, timestamp: new Date(h.timestamp) })),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function saveProjectsToStorage(projects: Project[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
-    projects: [],
+    projects: loadProjectsFromStorage(),
     activeProject: null,
     isGenerating: false,
     loadingMessage: "",
     activeFile: null,
     user: null,
-    authLoading: true,
+    authLoading: false,
   });
 
   const projectsLoadedRef = useRef(false);
-  const userRef = useRef<User | null>(null);
 
-  // Keep userRef in sync
+  // Set initial active project
   useEffect(() => {
-    userRef.current = state.user;
-  }, [state.user]);
-
-  // Auth listener
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState(prev => ({ ...prev, user: session?.user ?? null, authLoading: false }));
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setState(prev => ({ ...prev, user: session?.user ?? null, authLoading: false }));
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    projectsLoadedRef.current = false;
-    setState(prev => ({ ...prev, user: null, projects: [], activeProject: null, activeFile: null }));
+    if (!projectsLoadedRef.current && state.projects.length > 0) {
+      projectsLoadedRef.current = true;
+      setState(prev => ({
+        ...prev,
+        activeProject: prev.projects[0],
+      }));
+    }
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const user = userRef.current;
-    if (!user) return;
-
-    const { data: projectRows } = await supabase
-      .from("projects")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!projectRows) return;
-
-    const projects: Project[] = [];
-
-    for (const row of projectRows) {
-      const [{ data: fileRows }, { data: msgRows }] = await Promise.all([
-        supabase.from("project_files").select("*").eq("project_id", row.id),
-        supabase.from("chat_messages").select("*").eq("project_id", row.id).order("created_at", { ascending: true }),
-      ]);
-
-      projects.push({
-        id: row.id,
-        name: row.name,
-        description: row.description || "",
-        version: row.version,
-        createdAt: new Date(row.created_at),
-        files: (fileRows || []).map(f => ({
-          name: f.name,
-          path: f.path,
-          language: f.language,
-          content: f.content,
-        })),
-        // Filter out empty assistant messages (from task card stubs)
-        messages: (msgRows || [])
-          .filter(m => m.content && m.content.trim().length > 0)
-          .map(m => ({
-            id: m.id,
-            role: m.role as "user" | "assistant",
-            content: m.content,
-            timestamp: new Date(m.created_at),
-          })),
-        history: [],
-      });
-    }
-
+    const projects = loadProjectsFromStorage();
     setState(prev => ({
       ...prev,
       projects,
@@ -205,49 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  // Load projects when user logs in (only once per session)
-  useEffect(() => {
-    if (state.user && !projectsLoadedRef.current) {
-      projectsLoadedRef.current = true;
-      loadProjects();
-    }
-    if (!state.user) {
-      projectsLoadedRef.current = false;
-    }
-  }, [state.user, loadProjects]);
-
   const createProject = useCallback(async (name: string, description: string) => {
-    const user = userRef.current;
-    if (user) {
-      const { data, error } = await supabase
-        .from("projects")
-        .insert({ name, description, user_id: user.id })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const project: Project = {
-        id: data.id,
-        name: data.name,
-        description: data.description || "",
-        messages: [],
-        files: [],
-        createdAt: new Date(data.created_at),
-        version: 0,
-        history: [],
-      };
-
-      setState(prev => ({
-        ...prev,
-        projects: [project, ...prev.projects],
-        activeProject: project,
-        activeFile: null,
-      }));
-      return project;
-    }
-
-    // Fallback: local-only
     const project: Project = {
       id: crypto.randomUUID(),
       name,
@@ -258,12 +182,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       version: 0,
       history: [],
     };
-    setState(prev => ({
-      ...prev,
-      projects: [project, ...prev.projects],
-      activeProject: project,
-      activeFile: null,
-    }));
+
+    setState(prev => {
+      const newProjects = [project, ...prev.projects];
+      saveProjectsToStorage(newProjects);
+      return {
+        ...prev,
+        projects: newProjects,
+        activeProject: project,
+        activeFile: null,
+      };
+    });
     return project;
   }, []);
 
@@ -276,27 +205,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addMessage = useCallback((projectId: string, message: ChatMessage) => {
-    // Only save to DB if message has actual content
-    const user = userRef.current;
-    if (user && message.content && message.content.trim().length > 0) {
-      supabase
-        .from("chat_messages")
-        .insert({
-          id: message.id,
-          project_id: projectId,
-          role: message.role,
-          content: message.content,
-        })
-        .then();
-    }
-
     setState(prev => {
       const projects = prev.projects.map(p =>
         p.id === projectId ? { ...p, messages: [...p.messages, message] } : p
       );
+      saveProjectsToStorage(projects);
+
       const activeProject = prev.activeProject?.id === projectId
         ? { ...prev.activeProject, messages: [...prev.activeProject.messages, message] }
         : prev.activeProject;
+
       return { ...prev, projects, activeProject };
     });
   }, []);
@@ -314,9 +232,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const projects = prev.projects.map(p =>
         p.id === projectId ? { ...p, messages: updateMessages(p.messages) } : p
       );
+      saveProjectsToStorage(projects);
+
       const activeProject = prev.activeProject?.id === projectId
         ? { ...prev.activeProject, messages: updateMessages(prev.activeProject.messages) }
         : prev.activeProject;
+
       return { ...prev, projects, activeProject };
     });
   }, []);
@@ -334,137 +255,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const projects = prev.projects.map(p =>
         p.id === projectId ? { ...p, messages: updateMessages(p.messages) } : p
       );
+      saveProjectsToStorage(projects);
+
       const activeProject = prev.activeProject?.id === projectId
         ? { ...prev.activeProject, messages: updateMessages(prev.activeProject.messages) }
         : prev.activeProject;
+
       return { ...prev, projects, activeProject };
     });
   }, []);
 
-  // Persist final assistant message content to DB (upsert)
   const persistAssistantMessage = useCallback((projectId: string, messageId: string, content: string) => {
-    const user = userRef.current;
-    if (!user || !content.trim()) return;
-
-    supabase
-      .from("chat_messages")
-      .upsert({
-        id: messageId,
-        project_id: projectId,
-        role: "assistant",
-        content: content,
-      })
-      .then();
-  }, []);
-
-  // Debounced DB persistence to avoid DELETE/INSERT race conditions
-  const fileSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingFilesRef = useRef<{ projectId: string; files: GeneratedFile[] } | null>(null);
-
-  const flushFilesToDb = useCallback((projectId: string, files: GeneratedFile[]) => {
-    const user = userRef.current;
-    if (!user) return;
-    supabase
-      .from("project_files")
-      .delete()
-      .eq("project_id", projectId)
-      .then(() => {
-        if (files.length > 0) {
-          supabase
-            .from("project_files")
-            .insert(files.map(f => ({
-              project_id: projectId,
-              name: f.name,
-              path: f.path,
-              language: f.language,
-              content: f.content,
-            })))
-            .then();
-        }
-      });
+    setState(prev => {
+      const projects = prev.projects.map(p =>
+        p.id === projectId
+          ? {
+              ...p,
+              messages: p.messages.map(m =>
+                m.id === messageId ? { ...m, content } : m
+              ),
+            }
+          : p
+      );
+      saveProjectsToStorage(projects);
+      return { ...prev, projects };
+    });
   }, []);
 
   const setFiles = useCallback((projectId: string, files: GeneratedFile[], prompt?: string) => {
-    // Debounce DB writes — only persist after 500ms of no further calls
-    pendingFilesRef.current = { projectId, files };
-    if (fileSaveTimerRef.current) clearTimeout(fileSaveTimerRef.current);
-    fileSaveTimerRef.current = setTimeout(() => {
-      const pending = pendingFilesRef.current;
-      if (pending) {
-        flushFilesToDb(pending.projectId, pending.files);
-        pendingFilesRef.current = null;
-      }
-    }, 500);
+    setState(prev => {
+      const updateProject = (p: Project): Project => {
+        if (p.id !== projectId) return p;
 
-    // Update version in DB (outside setState)
-    const user = userRef.current;
-    if (user) {
-      // We'll compute newVersion below and update DB here
-      setState(prev => {
-        const project = prev.projects.find(p => p.id === projectId) || prev.activeProject;
-        const currentVersion = project?.version ?? 0;
-        const newVersion = currentVersion + 1;
-
-        // Fire DB update outside of render cycle
-        queueMicrotask(() => {
-          supabase
-            .from("projects")
-            .update({ version: newVersion, updated_at: new Date().toISOString() })
-            .eq("id", projectId)
-            .then();
-        });
-
-        const updateProject = (p: Project): Project => {
-          const snapshot: VersionSnapshot = {
-            id: crypto.randomUUID(),
-            version: p.version,
-            files: p.files,
-            prompt: prompt || "Unknown change",
-            timestamp: new Date(),
-          };
-          const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
-          return { ...p, files, version: newVersion, history: newHistory };
+        const newVersion = p.version + 1;
+        const snapshot: VersionSnapshot = {
+          id: crypto.randomUUID(),
+          version: p.version,
+          files: p.files,
+          prompt: prompt || "Unknown change",
+          timestamp: new Date(),
         };
+        const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
+        return { ...p, files, version: newVersion, history: newHistory };
+      };
 
-        const projects = prev.projects.map(p =>
-          p.id === projectId ? updateProject(p) : p
-        );
-        const activeProject = prev.activeProject?.id === projectId
-          ? updateProject(prev.activeProject)
-          : prev.activeProject;
-        return { ...prev, projects, activeProject };
-      });
-    } else {
-      setState(prev => {
-        const updateProject = (p: Project): Project => {
-          const newVersion = p.version + 1;
-          const snapshot: VersionSnapshot = {
-            id: crypto.randomUUID(),
-            version: p.version,
-            files: p.files,
-            prompt: prompt || "Unknown change",
-            timestamp: new Date(),
-          };
-          const newHistory = p.files.length > 0 ? [...p.history, snapshot] : p.history;
-          return { ...p, files, version: newVersion, history: newHistory };
-        };
+      const projects = prev.projects.map(p =>
+        p.id === projectId ? updateProject(p) : p
+      );
+      saveProjectsToStorage(projects);
 
-        const projects = prev.projects.map(p =>
-          p.id === projectId ? updateProject(p) : p
-        );
-        const activeProject = prev.activeProject?.id === projectId
-          ? updateProject(prev.activeProject)
-          : prev.activeProject;
-        return { ...prev, projects, activeProject };
-      });
-    }
-  }, [flushFilesToDb]);
+      const activeProject = prev.activeProject?.id === projectId
+        ? updateProject(prev.activeProject)
+        : prev.activeProject;
+
+      return { ...prev, projects, activeProject };
+    });
+  }, []);
 
   const restoreVersion = useCallback((projectId: string, versionId: string) => {
     setState(prev => {
       const restoreInProject = (p: Project): Project => {
         const snapshot = p.history.find(h => h.id === versionId);
         if (!snapshot) return p;
+
         const currentSnapshot: VersionSnapshot = {
           id: crypto.randomUUID(),
           version: p.version,
@@ -483,9 +336,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const projects = prev.projects.map(p =>
         p.id === projectId ? restoreInProject(p) : p
       );
+      saveProjectsToStorage(projects);
+
       const activeProject = prev.activeProject?.id === projectId
         ? restoreInProject(prev.activeProject)
         : prev.activeProject;
+
       return { ...prev, projects, activeProject };
     });
   }, []);
@@ -496,6 +352,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setLoadingMessage = useCallback((msg: string) => {
     setState(prev => ({ ...prev, loadingMessage: msg }));
+  }, []);
+
+  const signOut = useCallback(async () => {
+    // No-op for GitHub Pages (no auth)
   }, []);
 
   return (
