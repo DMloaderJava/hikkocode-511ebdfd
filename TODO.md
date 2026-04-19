@@ -1,23 +1,11 @@
-# Remove Supabase - Replace with Local Functions
+# TODO: Настройка GitHub репозитория hikkocode-511ebdfd
 
-Status: Restarted
+## План изменений:
+- [x] 1. Обновить package.json (name, description, repository, version)
+- [x] 2. Обновить README.md (правильное описание проекта)
+- [x] 3. Проверить git remotes (`git remote -v`) - origin правильно настроен на https://github.com/DMloaderJava/hikkocode-511ebdfd.git
+- [x] 4. Запустить и протестировать app - bun не установлен глобально, используйте `npm run dev`. Изменения в package.json/README не влияют на запуск.
+- [ ] 5. Создать ветку `blackboxai/repo-setup`, закоммитить, запушить
+- [ ] 6. Создать Pull Request через gh CLI
 
-## Plan Summary
-Replace Supabase auth/DB/functions with localStorage + local functions.
-
-## Steps
-
-- [ ] src/lib/localAuth.ts 
-- [ ] src/lib/localFunctions.ts (port github functions)
-
-### 2. Update Files
-- [ ] src/pages/Auth.tsx
-- [ ] src/components/builder/ProjectSidebar.tsx
-- [ ] src/pages/Landing.tsx
-- [ ] src/components/builder/PublishDialog.tsx
-- [ ] src/components/builder/GitHubDialog.tsx
-- [ ] src/lib/generator.ts
-- [ ] src/context/AppContext.tsx
-
-### 3. Cleanup
-- [ ] package
+**Целевой репозиторий:** https://github.com/DMloaderJava/hikkocode-511ebdfd
