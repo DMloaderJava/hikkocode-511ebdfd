@@ -1,23 +1,16 @@
-# Remove Supabase - Replace with Local Functions
+# TODO: Отключение авторизации временно
 
-Status: Restarted
+## План реализации:
+- [x] Обновить src/context/AppContext.tsx - установить mock пользователя вместо null
+- [x] Протестировать переход на /builder без экрана входа  
+- [ ] Подтвердить прямой доступ к приложению
 
-## Plan Summary
-Replace Supabase auth/DB/functions with localStorage + local functions.
+**Статус:** ✅ Выполнено!
 
-## Steps
+**Безопасность:** 
+- Локальная разработка (mock Supabase)
+- Нет реального backend/API
+- GitHub Pages (статический хостинг)
+- Временное изменение с комментариями
 
-- [ ] src/lib/localAuth.ts 
-- [ ] src/lib/localFunctions.ts (port github functions)
-
-### 2. Update Files
-- [ ] src/pages/Auth.tsx
-- [ ] src/components/builder/ProjectSidebar.tsx
-- [ ] src/pages/Landing.tsx
-- [ ] src/components/builder/PublishDialog.tsx
-- [ ] src/components/builder/GitHubDialog.tsx
-- [ ] src/lib/generator.ts
-- [ ] src/context/AppContext.tsx
-
-### 3. Cleanup
-- [ ] package
+**Revert:** Вернуть `user: null` в AppContext.tsx

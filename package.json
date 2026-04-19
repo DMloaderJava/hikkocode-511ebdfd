@@ -1,7 +1,12 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "hikkocode-511ebdfd",
+  "description": "AI-powered code builder with agent assistance, live preview, GitHub integration, and Supabase backend",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DMloaderJava/hikkocode-511ebdfd.git"
+  },
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
