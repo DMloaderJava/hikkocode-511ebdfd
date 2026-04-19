@@ -1,10 +1,8 @@
 /**
- * Agent API client — frontend interface to the orchestrator and indexer edge functions.
+ * Agent API client — local mock interface.
  */
 
 import { supabase } from "@/integrations/supabase/client";
-
-const BASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface CreateTaskParams {
   projectId: string;
@@ -55,167 +53,98 @@ interface AppliedPatch {
   reverted: boolean;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-  };
-}
-
 /**
- * Create a new agent task.
+ * Create a new agent task (Local Mock).
  */
 export async function createAgentTask(params: CreateTaskParams): Promise<{ task_id: string; status: string }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${BASE_URL}/functions/v1/agent`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      project_id: params.projectId,
-      user_request: params.userRequest,
-      repo: params.repo,
-      branch: params.branch,
-    }),
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Agent API error ${resp.status}`);
-  }
-
-  return resp.json();
+  console.log("Mock: Creating agent task", params);
+  return { task_id: crypto.randomUUID(), status: "pending" };
 }
 
 /**
- * Get task details with logs and patches.
+ * Get task details (Local Mock).
  */
 export async function getAgentTask(taskId: string): Promise<{
   task: AgentTask;
   logs: TaskLog[];
   patches: AppliedPatch[];
 }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${BASE_URL}/functions/v1/agent/${taskId}`, {
-    method: "GET",
-    headers,
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Agent API error ${resp.status}`);
-  }
-
-  return resp.json();
+  console.log("Mock: Getting agent task", taskId);
+  return {
+    task: {
+      id: taskId,
+      project_id: "mock",
+      user_request: "Mock request",
+      repo: null,
+      branch: "main",
+      status: "completed",
+      plan: {},
+      patches: [],
+      build_log: null,
+      test_log: null,
+      error: null,
+      iterations: 0,
+      files_changed: [],
+      pr_url: null,
+      pr_number: null,
+      commit_sha: null,
+      created_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    },
+    logs: [],
+    patches: [],
+  };
 }
 
 /**
- * List recent tasks.
+ * List recent tasks (Local Mock).
  */
 export async function listAgentTasks(): Promise<{ tasks: AgentTask[] }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${BASE_URL}/functions/v1/agent`, {
-    method: "GET",
-    headers,
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Agent API error ${resp.status}`);
-  }
-
-  return resp.json();
+  return { tasks: [] };
 }
 
 /**
- * Get task logs (streaming via realtime).
+ * Subscribe to task logs (Local Mock).
  */
 export function subscribeToTaskLogs(
   taskId: string,
   onLog: (log: TaskLog) => void
 ): () => void {
-  const channel = supabase
-    .channel(`task-logs-${taskId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "task_logs",
-        filter: `task_id=eq.${taskId}`,
-      },
-      (payload) => onLog(payload.new as TaskLog)
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  console.log("Mock: Subscribing to logs", taskId);
+  return () => {};
 }
 
 /**
- * Subscribe to task status changes.
+ * Subscribe to task status changes (Local Mock).
  */
 export function subscribeToTask(
   taskId: string,
   onUpdate: (task: Partial<AgentTask>) => void
 ): () => void {
-  const channel = supabase
-    .channel(`task-${taskId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "agent_tasks",
-        filter: `id=eq.${taskId}`,
-      },
-      (payload) => onUpdate(payload.new as Partial<AgentTask>)
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  console.log("Mock: Subscribing to task", taskId);
+  return () => {};
 }
 
 /**
- * Index a project's files.
+ * Index a project's files (Local Mock).
  */
 export async function indexProject(params: {
   projectId: string;
   repo?: string;
   branch?: string;
 }): Promise<{ success: boolean; indexed: number; files: any[] }> {
-  const headers = await getAuthHeaders();
-  const resp = await fetch(`${BASE_URL}/functions/v1/indexer`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      project_id: params.projectId,
-      repo: params.repo,
-      branch: params.branch,
-    }),
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Indexer error ${resp.status}`);
-  }
-
-  return resp.json();
+  console.log("Mock: Indexing project", params);
+  return { success: true, indexed: 0, files: [] };
 }
 
 /**
- * Search file index for relevant files.
+ * Search file index for relevant files (Local Mock).
  */
 export async function searchFileIndex(projectId: string, query: string): Promise<any[]> {
   const { data } = await supabase
     .from("file_index")
     .select("*")
     .eq("project_id", projectId)
-    .or(`summary.ilike.%${query}%,file_path.ilike.%${query}%`)
     .limit(20);
 
   return data || [];
