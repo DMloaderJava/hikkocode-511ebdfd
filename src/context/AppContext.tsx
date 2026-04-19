@@ -72,7 +72,7 @@ interface AppState {
   isGenerating: boolean;
   loadingMessage: string;
   activeFile: GeneratedFile | null;
-  user: null; // No auth for GitHub Pages
+  user: { id: string; email: string; display_name?: string } | null; // TEMP: Mock user to bypass auth
   authLoading: boolean;
 }
 
@@ -143,7 +143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isGenerating: false,
     loadingMessage: "",
     activeFile: null,
-    user: null,
+    user: { id: "mock-user-id", email: "dev@hikkocode.com", display_name: "Dev" }, // TEMP: Bypass auth
     authLoading: false,
   });
 
