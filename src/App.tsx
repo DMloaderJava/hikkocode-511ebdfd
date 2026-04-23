@@ -31,28 +31,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { user, authLoading } = useApp();
-
-  if (authLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 rounded-lg gradient-lovable animate-pulse" />
-      </div>
-    );
-  }
-
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/auth" element={user ? <Navigate to="/builder" replace /> : <Auth />} />
-      <Route
-        path="/builder"
-        element={
-          <ProtectedRoute>
-            <Builder />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/builder" element={<Builder />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

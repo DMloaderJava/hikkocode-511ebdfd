@@ -16,7 +16,7 @@ export async function generateProject(
   }, 2200);
 
   try {
-    onLoadingMessage("🧠 Sending prompt to Gemini AI...");
+    onLoadingMessage("🧠 Sending prompt to Kimi AI...");
 
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate`,

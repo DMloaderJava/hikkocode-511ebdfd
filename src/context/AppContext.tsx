@@ -72,9 +72,6 @@ interface AppState {
   isGenerating: boolean;
   loadingMessage: string;
   activeFile: GeneratedFile | null;
-  user: { id: string; email: string; display_name?: string } | null; // TEMP: Mock user to bypass auth
-  authLoading: boolean;
-}
 
 interface AppContextType extends AppState {
   createProject: (name: string, description: string) => Promise<Project>;
@@ -88,7 +85,6 @@ interface AppContextType extends AppState {
   updateLastAssistantMessage: (projectId: string, content: string) => void;
   updateLastAssistantTask: (projectId: string, task: GenerationTask) => void;
   persistAssistantMessage: (projectId: string, messageId: string, content: string) => void;
-  signOut: () => Promise<void>;
   loadProjects: () => Promise<void>;
 }
 
@@ -143,8 +139,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isGenerating: false,
     loadingMessage: "",
     activeFile: null,
-    user: { id: "mock-user-id", email: "dev@hikkocode.com", display_name: "Dev" }, // TEMP: Bypass auth
-    authLoading: false,
   });
 
   const projectsLoadedRef = useRef(false);
@@ -354,9 +348,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, loadingMessage: msg }));
   }, []);
 
-  const signOut = useCallback(async () => {
-    // No-op for GitHub Pages (no auth)
-  }, []);
 
   return (
     <AppContext.Provider value={{
@@ -372,7 +363,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateLastAssistantMessage,
       updateLastAssistantTask,
       persistAssistantMessage,
-      signOut,
       loadProjects,
     }}>
       {children}
