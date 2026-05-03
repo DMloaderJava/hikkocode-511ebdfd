@@ -1,53 +1,27 @@
-import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";  // Измените на HashRouter
-import { AppProvider, useApp } from "@/context/AppContext";
+import { HashRouter, Routes, Route } from "react-router-dom";
+import { AppProvider } from "@/context/AppContext";
 import Landing from "./pages/Landing";
 import Builder from "./pages/Builder";
-import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, authLoading } = useApp();
-
-  if (authLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 rounded-lg gradient-lovable animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  return <>{children}</>;
-}
-
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/builder" element={<Builder />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-}
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <HashRouter basename="/">  {/* Измените на HashRouter с basename="/" */}
+      <HashRouter>
         <AppProvider>
           <Toaster />
           <Sonner />
-          <AppRoutes />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/builder" element={<Builder />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </AppProvider>
       </HashRouter>
     </TooltipProvider>
