@@ -175,6 +175,21 @@ export function ChatPanel() {
     }
   }, [activeProject, location.state]);
 
+  // Listen for "Fix problem" button from preview Issues panel
+  useEffect(() => {
+    function onFix(ev: Event) {
+      const detail = (ev as CustomEvent).detail;
+      if (!detail || isGenerating) return;
+      const summary = detail.summary as string;
+      const fixPrompt = `Preview detected runtime issues. Please diagnose and fix them.\n\nIssues:\n${summary}`;
+      submitPrompt(fixPrompt);
+    }
+    window.addEventListener("hikko:fix-issues", onFix as EventListener);
+    return () => window.removeEventListener("hikko:fix-issues", onFix as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating, activeProject]);
+
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
