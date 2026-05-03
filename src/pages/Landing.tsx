@@ -67,7 +67,8 @@ const ProjectCard = forwardRef<HTMLButtonElement, { project: any; onClick: () =>
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { user, projects, createProject, setActiveProject, setFiles } = useApp();
+  const { projects, createProject, setActiveProject, setFiles } = useApp();
+  const user = true; // guest mode — no auth
   const [prompt, setPrompt] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [showImport, setShowImport] = useState(false);

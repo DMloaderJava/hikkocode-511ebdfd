@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export function ProjectSidebar({ onCollapse }: { onCollapse?: () => void }) {
-  const { projects, activeProject, setActiveProject, createProject, user, signOut, loadProjects } = useApp();
+  const { projects, activeProject, setActiveProject, createProject, loadProjects } = useApp();
+  const user = { email: "guest@hikkocode.local" } as { email?: string };
+  const signOut = async () => {};
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"));
