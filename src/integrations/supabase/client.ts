@@ -47,10 +47,11 @@ export const supabase = {
   },
   from: (table: string) => createMockBuilder(table),
   functions: {
-    invoke: async (name: string, options?: any) => {
+    invoke: async (name: string, options?: any): Promise<{ data: any; error: any }> => {
       console.log(`Mock function invoke: ${name}`, options);
-      if (name === "github") {
-        return { data: { success: true, url: "https://github.com/mock/repo" }, error: null };
+      // Real GitHub public API for import_repo (no auth needed)
+      if (name === "github" && options?.body?.action === "import_repo") {
+        return await importPublicRepo(options.body.url);
       }
       return { data: {}, error: null };
     },
