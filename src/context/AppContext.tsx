@@ -72,6 +72,7 @@ interface AppState {
   isGenerating: boolean;
   loadingMessage: string;
   activeFile: GeneratedFile | null;
+}
 
 interface AppContextType extends AppState {
   createProject: (name: string, description: string) => Promise<Project>;
